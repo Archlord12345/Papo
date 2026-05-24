@@ -3,11 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../state/app_state.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/glass_card.dart';
-import '../../widgets/custom_button.dart';
-import '../../widgets/screen_explorer.dart';
+import '../state/app_state.dart';
+import '../theme/app_colors.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/custom_button.dart';
+import '../widgets/screen_explorer.dart';
 import 'main_screens.dart';
 
 class MerchantDashboardScreen extends StatefulWidget {

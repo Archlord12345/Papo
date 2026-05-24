@@ -39,6 +39,8 @@ dependencies:
   qr_flutter: ^4.1.0
   fl_chart: ^0.70.0
   lucide_icons_flutter: any
+  shared_preferences: ^2.5.3
+  flutter_nfc_kit: ^3.5.2
 
 dev_dependencies:
   flutter_test:

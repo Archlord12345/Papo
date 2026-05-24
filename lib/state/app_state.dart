@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/local_storage_service.dart';
+
 class Transaction {
   final String id;
   final String title;
@@ -106,8 +108,48 @@ class AppState extends ChangeNotifier {
   bool biometricsEnabled = true;
   bool twoFactorEnabled = false;
 
+  final LocalStorageService _localStorageService = LocalStorageService();
+  List<Map<String, dynamic>> pairedDevices = [];
+
   AppState() {
     _initMockData();
+    _restoreLocalData();
+  }
+
+
+  Future<void> _restoreLocalData() async {
+    pairedDevices = await _localStorageService.loadPairings();
+    notifyListeners();
+  }
+
+  Future<void> addPairedDevice({required String peerId, required String alias}) async {
+    final exists = pairedDevices.any((d) => d['peerId'] == peerId);
+    if (!exists) {
+      pairedDevices.insert(0, {
+        'peerId': peerId,
+        'alias': alias,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      await _localStorageService.savePairings(pairedDevices);
+      addNotification('Appareil appairé', 'Nouveau contact NFC enregistré: $alias', 'success');
+      notifyListeners();
+    }
+  }
+
+  Future<void> persistOfflineQueueSnapshot() async {
+    final data = offlineQueue
+        .map((tx) => {
+              'id': tx.id,
+              'title': tx.title,
+              'amount': tx.amount,
+              'asset': tx.asset,
+              'type': tx.type,
+              'timestamp': tx.timestamp.toIso8601String(),
+              'status': tx.status,
+              'description': tx.description,
+            })
+        .toList();
+    await _localStorageService.saveOfflineQueueBackup(data);
   }
 
   void _initMockData() {
@@ -284,6 +326,7 @@ class AppState extends ChangeNotifier {
       "info"
     );
 
+    persistOfflineQueueSnapshot();
     notifyListeners();
   }
 
@@ -308,6 +351,7 @@ class AppState extends ChangeNotifier {
       "success"
     );
 
+    persistOfflineQueueSnapshot();
     notifyListeners();
   }
 
