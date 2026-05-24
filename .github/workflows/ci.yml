@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   backend:
@@ -13,6 +14,23 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: papo_user
+          POSTGRES_PASSWORD: papo_password
+          POSTGRES_DB: papo_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U papo_user -d papo_db"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://papo_user:papo_password@localhost:5432/papo_db?schema=public
+      JWT_SECRET: ci-jwt-secret
 
     steps:
       - name: Checkout repository
@@ -31,11 +49,17 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+
+      - name: Lint backend
+        run: npm run lint -- --max-warnings=0
+
       - name: Build backend
         run: npm run build
 
       - name: Run unit tests
-        run: npm run test
+        run: npm run test -- --runInBand
 
   flutter:
     name: Flutter Mobile CI
@@ -46,7 +70,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -63,5 +87,5 @@ jobs:
       - name: Analyze code
         run: flutter analyze
 
-      - name: Run tests
+      - name: Run widget tests
         run: flutter test

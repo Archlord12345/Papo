@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../state/app_state.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/glass_card.dart';
-import '../../widgets/custom_button.dart';
-import '../../widgets/custom_input.dart';
-import '../../widgets/screen_explorer.dart';
+import '../state/app_state.dart';
+import '../theme/app_colors.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/custom_button.dart';
+import '../widgets/custom_input.dart';
+import '../widgets/screen_explorer.dart';
+import '../services/nfc_service.dart';
 
 // Helper to format currency
 String formatCurrency(double amount, String asset) {
@@ -600,6 +601,7 @@ class SendMoneyScreen extends StatefulWidget {
 class _SendMoneyScreenState extends State<SendMoneyScreen> {
   final _recipientController = TextEditingController();
   final _amountController = TextEditingController();
+  final _nfcService = NfcService();
   String _selectedAsset = "XOF";
   bool _scanningQR = false;
 
@@ -707,12 +709,30 @@ class _SendMoneyScreenState extends State<SendMoneyScreen> {
                                 const Text("Approchez votre téléphone d'un appareil", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                 const SizedBox(height: 24),
                                 CustomButton(
-                                  text: "Simuler l'appairage",
-                                  onPressed: () {
-                                    setState(() {
-                                      _recipientController.text = "+225 01 02 03 04 05";
-                                    });
-                                    Navigator.pop(context);
+                                  text: "Appairer via NFC",
+                                  onPressed: () async {
+                                    try {
+                                      final peerId = await _nfcService.pairAndGetPeerId();
+                                      if (!mounted) return;
+                                      setState(() {
+                                        _recipientController.text = peerId;
+                                      });
+                                      await appState.addPairedDevice(peerId: peerId, alias: 'Contact NFC ${peerId.substring(0, peerId.length > 6 ? 6 : peerId.length)}');
+                                      if (!context.mounted) return;
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Appareil appairé: $peerId')),
+                                      );
+                                    } catch (_) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('NFC indisponible, mode simulation activé')),
+                                      );
+                                      setState(() {
+                                        _recipientController.text = "+225 01 02 03 04 05";
+                                      });
+                                      Navigator.pop(context);
+                                    }
                                   },
                                 ),
                               ],
@@ -818,6 +838,7 @@ class ReceiveMoneyScreen extends StatefulWidget {
 
 class _ReceiveMoneyScreenState extends State<ReceiveMoneyScreen> {
   final _amountController = TextEditingController();
+  final _nfcService = NfcService();
   String _selectedAsset = "XOF";
 
   @override
@@ -926,10 +947,14 @@ class _ReceiveMoneyScreenState extends State<ReceiveMoneyScreen> {
                           const Text("Approchez l'autre téléphone avec NFC actif"),
                           const SizedBox(height: 24),
                           CustomButton(
-                            text: "Simuler la réception",
-                            onPressed: () {
+                            text: "Recevoir maintenant",
+                            onPressed: () async {
+                              try {
+                                await _nfcService.readIncomingPaymentRequest();
+                              } catch (_) {}
                               final amt = double.tryParse(_amountController.text) ?? 5000;
                               appState.receiveMoney(amt, _selectedAsset);
+                              if (!context.mounted) return;
                               Navigator.pop(context);
                               appState.setScreen("Dashboard");
                             },
