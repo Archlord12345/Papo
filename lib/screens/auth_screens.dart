@@ -39,7 +39,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // Auto-navigate to Onboarding after 2.5 seconds
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        Provider.of<AppState>(context, listen: false).setScreen("Onboarding");
+        final appState = Provider.of<AppState>(context, listen: false);
+        if (appState.currentScreen == "Splash") {
+          appState.setScreen(appState.isAuthenticated ? "Dashboard" : "Onboarding");
+        }
       }
     });
   }
@@ -294,8 +297,180 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 // ==========================================
 // 3. LOGIN SCREEN
 // ==========================================
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _phoneController = TextEditingController();
+  final _pinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = Provider.of<AppState>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      drawer: const ScreenExplorer(),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              const Text(
+                "Bon retour !",
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Connexion Appwrite directe avec votre numéro et votre PIN.",
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.textDarkSecondary
+                      : AppColors.textLightSecondary,
+                ),
+              ),
+              const SizedBox(height: 32),
+              CustomInput(
+                label: "Numéro de Téléphone",
+                hint: "ex: +225 07 08 09 10 11",
+                prefixIcon: LucideIcons.phone,
+                keyboardType: TextInputType.phone,
+                controller: _phoneController,
+              ),
+              const SizedBox(height: 20),
+              CustomInput(
+                label: "Code PIN",
+                hint: "6 chiffres",
+                prefixIcon: LucideIcons.lock,
+                isPassword: true,
+                keyboardType: TextInputType.number,
+                controller: _pinController,
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    appState.setScreen("ForgotPassword");
+                  },
+                  child: const Text("Mot de passe oublié ?"),
+                ),
+              ),
+              if (appState.lastError != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  appState.lastError!,
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+              ],
+              const SizedBox(height: 24),
+              CustomButton(
+                text: "Se Connecter",
+                isLoading: appState.isBusy,
+                onPressed: () async {
+                  final phone = _phoneController.text.trim();
+                  final pin = _pinController.text.trim();
+                  if (phone.isEmpty || pin.length < 6) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Renseignez un numéro et un PIN valide."),
+                      ),
+                    );
+                    return;
+                  }
+
+                  final success = await appState.login(phone: phone, pin: pin);
+                  if (!mounted) return;
+                  if (success) {
+                    appState.setScreen("Dashboard");
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+              CustomButton(
+                text: "Connexion session active",
+                isPrimary: false,
+                icon: const Icon(
+                  LucideIcons.fingerprint,
+                  color: AppColors.primary,
+                ),
+                onPressed: () {
+                  appState.setScreen("BiometricLogin");
+                },
+              ),
+              const SizedBox(height: 48),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Nouveau sur PAPO ? ",
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textDarkSecondary
+                          : AppColors.textLightSecondary,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      appState.setScreen("Register");
+                    },
+                    child: const Text(
+                      "Créer un compte",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 4. REGISTER SCREEN
+// ==========================================
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _pinController = TextEditingController();
+  final _confirmPinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _pinController.dispose();
+    _confirmPinController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -325,44 +500,48 @@ class LoginScreen extends StatelessWidget {
                 style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
               ),
               const SizedBox(height: 32),
-              const CustomInput(
+              CustomInput(
                 label: "Numéro de Téléphone",
                 hint: "ex: +225 07 08 09 10 11",
                 prefixIcon: LucideIcons.phone,
                 keyboardType: TextInputType.phone,
+                controller: _phoneController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
-                label: "Mot de passe",
-                hint: "Saisissez votre code PIN/mot de passe",
+              CustomInput(
+                label: "Code PIN",
+                hint: "6 chiffres",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
+                keyboardType: TextInputType.number,
+                controller: _pinController,
               ),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    appState.setScreen("ForgotPassword");
-                  },
-                  child: const Text("Mot de passe oublié ?"),
+              if (appState.lastError != null)
+                Text(
+                  appState.lastError!,
+                  style: const TextStyle(color: AppColors.danger),
                 ),
-              ),
               const SizedBox(height: 24),
               CustomButton(
                 text: "Se Connecter",
-                onPressed: () {
-                  appState.setScreen("OTP");
-                },
-              ),
-              const SizedBox(height: 20),
-              // Biometrics login shortcut
-              CustomButton(
-                text: "Connexion Biométrique",
-                isPrimary: false,
-                icon: const Icon(LucideIcons.fingerprint, color: AppColors.primary),
-                onPressed: () {
-                  appState.setScreen("BiometricLogin");
+                isLoading: appState.isBusy,
+                onPressed: () async {
+                  final phone = _phoneController.text.trim();
+                  final pin = _pinController.text.trim();
+                  if (phone.isEmpty || pin.length < 6) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Renseignez un numéro et un PIN valide."),
+                      ),
+                    );
+                    return;
+                  }
+                  final success = await appState.login(phone: phone, pin: pin);
+                  if (!mounted) return;
+                  if (success) {
+                    appState.setScreen("Dashboard");
+                  }
                 },
               ),
               const SizedBox(height: 48),
@@ -387,81 +566,116 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-// ==========================================
-// 4. REGISTER SCREEN
-// ==========================================
-class RegisterScreen extends StatelessWidget {
-  const RegisterScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      drawer: const ScreenExplorer(),
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
+              const SizedBox(height: 32),
+              Text(
                 "Créer un Compte",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
-                "Rejoignez PAYPOINT pour des paiements instantanés et sécurisés.",
-                style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
+                "Votre compte et vos données seront créés directement dans Appwrite.",
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.textDarkSecondary
+                      : AppColors.textLightSecondary,
+                ),
               ),
               const SizedBox(height: 32),
-              const CustomInput(
+              CustomInput(
                 label: "Nom complet",
                 hint: "ex: Mamadou Diallo",
                 prefixIcon: LucideIcons.user,
+                controller: _nameController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Numéro de Téléphone",
                 hint: "ex: +225 07 08 09 10 11",
                 prefixIcon: LucideIcons.phone,
                 keyboardType: TextInputType.phone,
+                controller: _phoneController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
-                label: "Mot de passe (PIN)",
-                hint: "Code PIN secret à 6 chiffres",
+              CustomInput(
+                label: "Code PIN",
+                hint: "Code PIN à 6 chiffres",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
                 keyboardType: TextInputType.number,
+                controller: _pinController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Confirmer le code PIN",
                 hint: "Saisissez à nouveau votre code PIN",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
                 keyboardType: TextInputType.number,
+                controller: _confirmPinController,
               ),
+              if (appState.lastError != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  appState.lastError!,
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+              ],
               const SizedBox(height: 24),
               CustomButton(
                 text: "S'inscrire",
-                onPressed: () {
-                  appState.setScreen("OTP");
+                isLoading: appState.isBusy,
+                onPressed: () async {
+                  final name = _nameController.text.trim();
+                  final phone = _phoneController.text.trim();
+                  final pin = _pinController.text.trim();
+                  final confirmPin = _confirmPinController.text.trim();
+
+                  if (name.isEmpty || phone.isEmpty || pin.length < 6) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Veuillez remplir tous les champs."),
+                      ),
+                    );
+                    return;
+                  }
+                  if (pin != confirmPin) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Les PIN ne correspondent pas.")),
+                    );
+                    return;
+                  }
+
+                  final success = await appState.register(
+                    fullName: name,
+                    phone: phone,
+                    pin: pin,
+                  );
+                  if (!mounted) return;
+                  if (success) {
+                    appState.setScreen("Dashboard");
+                  }
                 },
               ),
               const SizedBox(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("Vous avez déjà un compte ? ", style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary)),
+                  Text(
+                    "Vous avez déjà un compte ? ",
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textDarkSecondary
+                          : AppColors.textLightSecondary,
+                    ),
+                  ),
                   TextButton(
                     onPressed: () {
                       appState.setScreen("Login");
                     },
-                    child: const Text("Connexion", style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      "Connexion",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -507,7 +721,7 @@ class _OtpScreenState extends State<OtpScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Saisissez le code de vérification à 4 chiffres envoyé au ${appState.userPhone}.",
+              "Ce projet utilise désormais une authentification Appwrite directe. Cette étape OTP n'est plus utilisée dans le flux principal.",
               style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
             ),
             const SizedBox(height: 48),
@@ -540,19 +754,22 @@ class _OtpScreenState extends State<OtpScreen> {
             ),
             const SizedBox(height: 48),
             CustomButton(
-              text: "Vérifier et Continuer",
+              text: "Continuer",
               onPressed: () {
-                appState.setScreen("Dashboard");
+                appState.setScreen(appState.isAuthenticated ? "Dashboard" : "Login");
               },
             ),
             const SizedBox(height: 24),
             Center(
               child: TextButton(
                 onPressed: () {
-                  // Resend simulation
-                  appState.addNotification("OTP Renvoyé", "Un nouveau code a été envoyé au ${appState.userPhone}.", "info");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Le flux OTP a été remplacé par une session Appwrite directe."),
+                    ),
+                  );
                 },
-                child: const Text("Renvoyer le code OTP"),
+                child: const Text("Retour à la connexion"),
               ),
             ),
           ],
@@ -586,7 +803,7 @@ class ForgotPasswordScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Entrez votre numéro de téléphone. Nous vous enverrons un lien/OTP de réinitialisation.",
+                "La réinitialisation automatique n'est pas encore disponible sans configuration complémentaire Appwrite. Connectez-vous puis modifiez votre PIN depuis l'espace sécurité.",
               style: TextStyle(color: AppColors.textDarkSecondary),
             ),
             const SizedBox(height: 32),
@@ -598,9 +815,9 @@ class ForgotPasswordScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             CustomButton(
-              text: "Envoyer le code",
+              text: "Aller à la connexion",
               onPressed: () {
-                appState.setScreen("ResetPassword");
+                appState.setScreen("Login");
               },
             ),
           ],
@@ -613,8 +830,25 @@ class ForgotPasswordScreen extends StatelessWidget {
 // ==========================================
 // 7. RESET PASSWORD SCREEN
 // ==========================================
-class ResetPasswordScreen extends StatelessWidget {
+class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
+
+  @override
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+}
+
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+  final _currentPinController = TextEditingController();
+  final _newPinController = TextEditingController();
+  final _confirmPinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _currentPinController.dispose();
+    _newPinController.dispose();
+    _confirmPinController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -634,31 +868,77 @@ class ResetPasswordScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Définissez votre nouveau code PIN de sécurité.",
+              "Mettez à jour votre code PIN Appwrite depuis la session active.",
               style: TextStyle(color: AppColors.textDarkSecondary),
             ),
             const SizedBox(height: 32),
-            const CustomInput(
+            CustomInput(
+              label: "Code PIN actuel",
+              hint: "Votre code PIN actuel",
+              prefixIcon: LucideIcons.lock,
+              isPassword: true,
+              keyboardType: TextInputType.number,
+              controller: _currentPinController,
+            ),
+            const SizedBox(height: 20),
+            CustomInput(
               label: "Nouveau Code PIN",
               hint: "Code PIN à 6 chiffres",
               prefixIcon: LucideIcons.lock,
               isPassword: true,
               keyboardType: TextInputType.number,
+              controller: _newPinController,
             ),
             const SizedBox(height: 20),
-            const CustomInput(
+            CustomInput(
               label: "Confirmer le Code PIN",
               hint: "Saisissez à nouveau le code PIN",
               prefixIcon: LucideIcons.lock,
               isPassword: true,
               keyboardType: TextInputType.number,
+              controller: _confirmPinController,
             ),
+            if (appState.lastError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                appState.lastError!,
+                style: const TextStyle(color: AppColors.danger),
+              ),
+            ],
             const SizedBox(height: 32),
             CustomButton(
               text: "Enregistrer le mot de passe",
-              onPressed: () {
-                appState.addNotification("Sécurité : PIN Modifié", "Votre code PIN de sécurité a été réinitialisé avec succès.", "security");
-                appState.setScreen("Login");
+              isLoading: appState.isBusy,
+              onPressed: () async {
+                if (!appState.isAuthenticated) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Connectez-vous d'abord pour modifier votre PIN."),
+                    ),
+                  );
+                  return;
+                }
+
+                final currentPin = _currentPinController.text.trim();
+                final newPin = _newPinController.text.trim();
+                final confirmPin = _confirmPinController.text.trim();
+                if (newPin.length < 6 || newPin != confirmPin) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Le nouveau PIN est invalide ou ne correspond pas."),
+                    ),
+                  );
+                  return;
+                }
+
+                final success = await appState.changePin(
+                  currentPin: currentPin,
+                  newPin: newPin,
+                );
+                if (!mounted) return;
+                if (success) {
+                  appState.setScreen("SecuritySettings");
+                }
               },
             ),
           ],
@@ -706,7 +986,7 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                "Saisissez votre empreinte ou scannez votre visage pour déverrouiller votre portefeuille.",
+                "La biométrie matérielle n'est pas encore branchée. Cette entrée réutilise la session Appwrite déjà ouverte sur l'appareil.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textDarkSecondary),
               ),
@@ -714,17 +994,19 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen> {
               if (_isAuthenticating) ...[
                 const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
                 const SizedBox(height: 16),
-                const Text("Vérification de l'empreinte..."),
+                const Text("Vérification de la session..."),
               ] else ...[
                 CustomButton(
-                  text: "Simuler la lecture",
+                  text: "Continuer avec la session",
                   onPressed: () {
                     setState(() {
                       _isAuthenticating = true;
                     });
                     Timer(const Duration(seconds: 1), () {
                       if (mounted) {
-                        appState.setScreen("Dashboard");
+                        appState.setScreen(
+                          appState.isAuthenticated ? "Dashboard" : "Login",
+                        );
                       }
                     });
                   },
