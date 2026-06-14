@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:appwrite/appwrite.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../services/appwrite_service.dart';
 import '../services/local_storage_service.dart';
 
 class Transaction {
@@ -7,9 +12,9 @@ class Transaction {
   final String title;
   final double amount;
   final String asset;
-  final String type; // 'send', 'receive', 'offline', 'merchant'
+  final String type;
   final DateTime timestamp;
-  String status; // 'completed', 'pending', 'failed'
+  String status;
   final String description;
 
   Transaction({
@@ -22,13 +27,40 @@ class Transaction {
     required this.status,
     required this.description,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'amount': amount,
+      'asset': asset,
+      'type': type,
+      'timestamp': timestamp.toIso8601String(),
+      'status': status,
+      'description': description,
+    };
+  }
+
+  factory Transaction.fromMap(Map<String, dynamic> map) {
+    return Transaction(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      amount: (map['amount'] as num?)?.toDouble() ?? 0,
+      asset: map['asset']?.toString() ?? 'XOF',
+      type: map['type']?.toString() ?? 'send',
+      timestamp: DateTime.tryParse(map['timestamp']?.toString() ?? '') ??
+          DateTime.now(),
+      status: map['status']?.toString() ?? 'completed',
+      description: map['description']?.toString() ?? '',
+    );
+  }
 }
 
 class NotificationModel {
   final String id;
   final String title;
   final String content;
-  final String type; // 'security', 'success', 'info'
+  final String type;
   final DateTime timestamp;
   bool isRead;
 
@@ -40,14 +72,111 @@ class NotificationModel {
     required this.timestamp,
     this.isRead = false,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'content': content,
+      'type': type,
+      'timestamp': timestamp.toIso8601String(),
+      'isRead': isRead,
+    };
+  }
+
+  factory NotificationModel.fromMap(Map<String, dynamic> map) {
+    return NotificationModel(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? '',
+      content: map['content']?.toString() ?? '',
+      type: map['type']?.toString() ?? 'info',
+      timestamp: DateTime.tryParse(map['timestamp']?.toString() ?? '') ??
+          DateTime.now(),
+      isRead: map['isRead'] == true,
+    );
+  }
 }
 
 class AppState extends ChangeNotifier {
-  // Navigation
-  String _currentScreen = "Splash";
+  AppState() {
+    unawaited(initialize());
+  }
+
+  final AppwriteService _appwriteService = AppwriteService();
+  final LocalStorageService _localStorageService = LocalStorageService();
+
+  bool isInitializing = true;
+  bool isAuthenticated = false;
+  bool isBusy = false;
+  String? lastError;
+  String currentAuthFlow = 'login';
+
+  String _currentScreen = 'Splash';
   String get currentScreen => _currentScreen;
-  
+
   List<String> recentlyVisited = ['Dashboard', 'Wallet', 'Circle', 'Developer'];
+
+  String currentUserId = '';
+  String language = 'fr';
+  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode get themeMode => _themeMode;
+
+  String userName = 'Utilisateur';
+  String userPhone = '';
+  String walletAddress = '';
+  String avatarInitials = 'PP';
+  bool isMerchant = false;
+
+  final Map<String, double> balances = {
+    'XOF': 0,
+    'USD': 0,
+    'PAPO': 0,
+    'BTC': 0,
+  };
+
+  List<Transaction> transactions = [];
+  List<Transaction> offlineQueue = [];
+  List<NotificationModel> notifications = [];
+
+  List<String> activeDevices = [];
+  List<Map<String, dynamic>> pairedDevices = [];
+
+  String kycStatus = 'none';
+  String? uploadedDocType;
+  String? uploadedDocName;
+  String? uploadedKycFileId;
+  String? uploadedSelfieFileId;
+  bool isFaceVerified = false;
+
+  bool biometricsEnabled = false;
+  bool twoFactorEnabled = false;
+
+  Future<void> initialize() async {
+    try {
+      pairedDevices = await _localStorageService.loadPairings();
+      final user = await _appwriteService.getCurrentUser();
+      if (user == null) {
+        _resetToGuestState();
+      } else {
+        await _loadFromCloud(user.$id, fallbackName: user.name);
+        isAuthenticated = true;
+        _currentScreen = 'Dashboard';
+      }
+    } finally {
+      isInitializing = false;
+      notifyListeners();
+    }
+  }
+
+  void clearError() {
+    lastError = null;
+    notifyListeners();
+  }
+
+  void setBusy(bool value) {
+    isBusy = value;
+    notifyListeners();
+  }
 
   void setScreen(String screenName) {
     _currentScreen = screenName;
@@ -57,72 +186,141 @@ class AppState extends ChangeNotifier {
       if (recentlyVisited.length > 4) {
         recentlyVisited.removeLast();
       }
+      _saveSilently();
     }
     notifyListeners();
   }
 
-  // Language
-  String language = 'fr';
   void changeLanguage(String lang) {
     language = lang;
+    _saveSilently();
     notifyListeners();
   }
 
-  // Theme Mode
-  ThemeMode _themeMode = ThemeMode.dark;
-  ThemeMode get themeMode => _themeMode;
-
-  // User Profile
-  String userName = "Mamadou Diallo";
-  String userPhone = "+225 07 08 09 10 11";
-  String walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
-  String avatarInitials = "MD";
-  bool isMerchant = false;
-
-  // Balances
-  final Map<String, double> balances = {
-    'XOF': 458500,
-    'USD': 750,
-    'PAPO': 2500,
-    'BTC': 0.015,
-  };
-
-  // Lists
-  List<Transaction> transactions = [];
-  List<Transaction> offlineQueue = [];
-  List<NotificationModel> notifications = [];
-  
-  List<String> activeDevices = [
-    "Tecno Camon 20 • Abidjan, CI (Actuel)",
-    "iPhone 15 Pro • Dakar, SN",
-    "MacBook Pro • Abidjan, CI",
-  ];
-
-  // KYC States
-  String kycStatus = "none"; // 'none', 'pending', 'verified', 'rejected'
-  String? uploadedDocType; // 'CNI' or 'Passport'
-  String? uploadedDocName;
-  bool isFaceVerified = false;
-
-  // Security
-  bool biometricsEnabled = true;
-  bool twoFactorEnabled = false;
-
-  final LocalStorageService _localStorageService = LocalStorageService();
-  List<Map<String, dynamic>> pairedDevices = [];
-
-  AppState() {
-    _initMockData();
-    _restoreLocalData();
-  }
-
-
-  Future<void> _restoreLocalData() async {
-    pairedDevices = await _localStorageService.loadPairings();
+  void toggleTheme() {
+    _themeMode =
+        _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    _saveSilently();
     notifyListeners();
   }
 
-  Future<void> addPairedDevice({required String peerId, required String alias}) async {
+  Future<bool> register({
+    required String fullName,
+    required String phone,
+    required String pin,
+  }) async {
+    isBusy = true;
+    lastError = null;
+    notifyListeners();
+
+    try {
+      final user = await _appwriteService.register(
+        fullName: fullName,
+        phone: phone,
+        pin: pin,
+      );
+      currentUserId = user.$id;
+      userName = fullName;
+      userPhone = phone;
+      walletAddress = _buildWalletAddress(user.$id);
+      avatarInitials = _buildInitials(fullName);
+      activeDevices = ['Session actuelle'];
+      isAuthenticated = true;
+      _currentScreen = 'Dashboard';
+      addNotification(
+        'Compte créé',
+        'Votre compte PAYPOINT est maintenant connecté à Appwrite.',
+        'success',
+      );
+      await _persistCloudState();
+      return true;
+    } on AppwriteException catch (error) {
+      lastError = error.message;
+      return false;
+    } catch (error) {
+      lastError = error.toString();
+      return false;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> login({
+    required String phone,
+    required String pin,
+  }) async {
+    isBusy = true;
+    lastError = null;
+    notifyListeners();
+
+    try {
+      final user = await _appwriteService.login(phone: phone, pin: pin);
+      await _loadFromCloud(user.$id, fallbackName: user.name, fallbackPhone: phone);
+      isAuthenticated = true;
+      _currentScreen = 'Dashboard';
+      return true;
+    } on AppwriteException catch (error) {
+      lastError = error.message;
+      return false;
+    } catch (error) {
+      lastError = error.toString();
+      return false;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
+    isBusy = true;
+    notifyListeners();
+
+    try {
+      await _appwriteService.logout();
+      _resetToGuestState();
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> changePin({
+    required String currentPin,
+    required String newPin,
+  }) async {
+    isBusy = true;
+    lastError = null;
+    notifyListeners();
+
+    try {
+      await _appwriteService.updatePassword(
+        currentPin: currentPin,
+        newPin: newPin,
+      );
+      addNotification(
+        'PIN mis à jour',
+        'Votre code PIN a été modifié avec succès.',
+        'security',
+      );
+      await _persistCloudState();
+      return true;
+    } on AppwriteException catch (error) {
+      lastError = error.message;
+      return false;
+    } catch (error) {
+      lastError = error.toString();
+      return false;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addPairedDevice({
+    required String peerId,
+    required String alias,
+  }) async {
     final exists = pairedDevices.any((d) => d['peerId'] == peerId);
     if (!exists) {
       pairedDevices.insert(0, {
@@ -131,296 +329,229 @@ class AppState extends ChangeNotifier {
         'createdAt': DateTime.now().toIso8601String(),
       });
       await _localStorageService.savePairings(pairedDevices);
-      addNotification('Appareil appairé', 'Nouveau contact NFC enregistré: $alias', 'success');
+      addNotification(
+        'Appareil appairé',
+        'Nouveau contact NFC enregistré : $alias.',
+        'success',
+      );
+      await _persistCloudState();
       notifyListeners();
     }
   }
 
   Future<void> persistOfflineQueueSnapshot() async {
-    final data = offlineQueue
-        .map((tx) => {
-              'id': tx.id,
-              'title': tx.title,
-              'amount': tx.amount,
-              'asset': tx.asset,
-              'type': tx.type,
-              'timestamp': tx.timestamp.toIso8601String(),
-              'status': tx.status,
-              'description': tx.description,
-            })
-        .toList();
-    await _localStorageService.saveOfflineQueueBackup(data);
+    await _localStorageService.saveOfflineQueueBackup(
+      offlineQueue.map((tx) => tx.toMap()).toList(),
+    );
   }
 
-  void _initMockData() {
-    // Standard transactions
-    transactions = [
-      Transaction(
-        id: "TX-101",
-        title: "Transfert vers K. Yao",
-        amount: -15000,
-        asset: "XOF",
-        type: "send",
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        status: "completed",
-        description: "Envoi d'argent mobile à Kouassi Yao",
-      ),
-      Transaction(
-        id: "TX-102",
-        title: "Reçu de Papo Airdrop",
-        amount: 500,
-        asset: "PAPO",
-        type: "receive",
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        status: "completed",
-        description: "Récompense de bienvenue PAPO Wallet",
-      ),
-      Transaction(
-        id: "TX-103",
-        title: "Dépôt Cash Sika",
-        amount: 250000,
-        asset: "XOF",
-        type: "receive",
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        status: "completed",
-        description: "Dépôt d'espèces via point marchand agréé",
-      ),
-      Transaction(
-        id: "TX-104",
-        title: "Paiement Supermarché",
-        amount: -24500,
-        asset: "XOF",
-        type: "merchant",
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        status: "completed",
-        description: "Achat de provisions par QR Code",
-      ),
-      Transaction(
-        id: "TX-105",
-        title: "Envoi à Fatou Sy",
-        amount: -50,
-        asset: "USD",
-        type: "send",
-        timestamp: DateTime.now().subtract(const Duration(days: 4)),
-        status: "failed",
-        description: "Transfert transfrontalier USD échoué",
-      ),
-    ];
-
-    // Notifications
-    notifications = [
-      NotificationModel(
-        id: "N-1",
-        title: "Sécurité : Connexion réussie",
-        content: "Une nouvelle connexion a été détectée sur votre compte depuis Tecno Camon 20.",
-        type: "security",
-        timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-      ),
-      NotificationModel(
-        id: "N-2",
-        title: "Dépôt validé",
-        content: "Votre compte a été crédité de 250,000 XOF avec succès.",
-        type: "success",
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        isRead: true,
-      ),
-      NotificationModel(
-        id: "N-3",
-        title: "Paiement Hors Ligne prêt",
-        content: "Votre solde de secours hors ligne est configuré et disponible.",
-        type: "info",
-        timestamp: DateTime.now().subtract(const Duration(days: 5)),
-        isRead: true,
-      ),
-    ];
-  }
-
-  // Theme Action
-  void toggleTheme() {
-    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    notifyListeners();
-  }
-
-  // Send Money Action
   bool sendMoney(String recipient, double amount, String asset) {
-    double currentBal = balances[asset] ?? 0;
-    if (currentBal < amount) return false;
+    final currentBal = balances[asset] ?? 0;
+    if (currentBal < amount) {
+      return false;
+    }
 
     balances[asset] = currentBal - amount;
-    
-    // Add to transaction log
     transactions.insert(
       0,
       Transaction(
-        id: "TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-        title: "Transfert vers $recipient",
+        id: 'TX-${DateTime.now().millisecondsSinceEpoch}',
+        title: 'Transfert vers $recipient',
         amount: -amount,
         asset: asset,
-        type: "send",
+        type: 'send',
         timestamp: DateTime.now(),
-        status: "completed",
-        description: "Transfert immédiat initié depuis l'application",
+        status: 'completed',
+        description: 'Transfert enregistré sur votre compte Appwrite.',
       ),
     );
 
     addNotification(
-      "Transfert réussi",
-      "Vous avez envoyé $amount $asset à $recipient avec succès.",
-      "success"
+      'Transfert enregistré',
+      'Envoi de $amount $asset vers $recipient sauvegardé avec succès.',
+      'success',
     );
-
+    _saveSilently();
     notifyListeners();
     return true;
   }
 
-  // Receive Money Action
   void receiveMoney(double amount, String asset) {
-    double currentBal = balances[asset] ?? 0;
+    final currentBal = balances[asset] ?? 0;
     balances[asset] = currentBal + amount;
 
     transactions.insert(
       0,
       Transaction(
-        id: "TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-        title: "Reçu de fonds",
+        id: 'TX-${DateTime.now().millisecondsSinceEpoch}',
+        title: 'Réception de fonds',
         amount: amount,
         asset: asset,
-        type: "receive",
+        type: 'receive',
         timestamp: DateTime.now(),
-        status: "completed",
-        description: "Fonds reçus via code QR",
+        status: 'completed',
+        description: 'Réception enregistrée sur votre compte Appwrite.',
       ),
     );
 
     addNotification(
-      "Fonds reçus",
-      "Vous avez reçu $amount $asset sur votre portefeuille.",
-      "success"
+      'Fonds reçus',
+      'Réception de $amount $asset enregistrée avec succès.',
+      'success',
     );
-
+    _saveSilently();
     notifyListeners();
   }
 
-  // Offline Payment Queue Action
   void addOfflineTransaction(double amount, String recipient) {
-    double currentBal = balances['XOF'] ?? 0;
-    balances['XOF'] = currentBal - amount; // deduct locally
+    final currentBal = balances['XOF'] ?? 0;
+    balances['XOF'] = currentBal - amount;
 
-    Transaction offTx = Transaction(
-      id: "OFF-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-      title: "Paiement Offline vers $recipient",
+    final tx = Transaction(
+      id: 'OFF-${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Paiement hors ligne vers $recipient',
       amount: -amount,
-      asset: "XOF",
-      type: "offline",
+      asset: 'XOF',
+      type: 'offline',
       timestamp: DateTime.now(),
-      status: "pending",
-      description: "Signé localement par Bluetooth/NFC (En attente de synchro)",
+      status: 'pending',
+      description:
+          'Transaction signée localement. Synchronisation Appwrite requise.',
     );
 
-    offlineQueue.insert(0, offTx);
-    transactions.insert(0, offTx);
-
+    offlineQueue.insert(0, tx);
+    transactions.insert(0, tx);
     addNotification(
-      "Transaction Offline signée",
-      "Paiement de $amount XOF vers $recipient signé localement. Synchronisation requise.",
-      "info"
+      'Paiement hors ligne enregistré',
+      'Le paiement sera synchronisé avec Appwrite dès que le réseau revient.',
+      'info',
     );
-
-    persistOfflineQueueSnapshot();
+    unawaited(persistOfflineQueueSnapshot());
+    _saveSilently();
     notifyListeners();
   }
 
-  // Sync Offline Queue
   void syncOfflineTransactions() {
-    if (offlineQueue.isEmpty) return;
+    if (offlineQueue.isEmpty) {
+      return;
+    }
 
-    for (var tx in offlineQueue) {
-      // Find inside transaction list and update status
-      int index = transactions.indexWhere((element) => element.id == tx.id);
+    for (final tx in offlineQueue) {
+      final index = transactions.indexWhere((element) => element.id == tx.id);
       if (index != -1) {
-        transactions[index].status = "completed";
+        transactions[index].status = 'completed';
       }
     }
-    
-    int count = offlineQueue.length;
+
+    final count = offlineQueue.length;
     offlineQueue.clear();
-
     addNotification(
-      "Synchronisation réussie",
-      "Vos $count transactions hors ligne ont été ancrées sur la blockchain avec succès.",
-      "success"
+      'Synchronisation terminée',
+      '$count transaction(s) hors ligne ont été poussées sur Appwrite.',
+      'success',
     );
-
-    persistOfflineQueueSnapshot();
+    unawaited(persistOfflineQueueSnapshot());
+    _saveSilently();
     notifyListeners();
   }
 
-  // KYC Actions
-  void uploadKYCDocument(String type, String name) {
-    uploadedDocType = type;
-    uploadedDocName = name;
-    kycStatus = "pending";
-    
-    addNotification(
-      "KYC Soumis",
-      "Vos documents d'identité ($type) ont été soumis pour vérification.",
-      "info"
-    );
+  Future<bool> uploadKYCDocument({
+    required String type,
+    PlatformFile? documentFile,
+    PlatformFile? selfieFile,
+  }) async {
+    isBusy = true;
+    lastError = null;
     notifyListeners();
+
+    try {
+      uploadedDocType = type;
+      if (documentFile != null) {
+        uploadedDocName = documentFile.name;
+        uploadedKycFileId = await _appwriteService.uploadUserFile(documentFile);
+      }
+      if (selfieFile != null) {
+        uploadedSelfieFileId = await _appwriteService.uploadUserFile(selfieFile);
+        isFaceVerified = true;
+      }
+      kycStatus = 'pending';
+      addNotification(
+        'KYC soumis',
+        'Votre dossier $type a été téléversé vers Appwrite pour vérification.',
+        'info',
+      );
+      await _persistCloudState();
+      return true;
+    } on AppwriteException catch (error) {
+      lastError = error.message;
+      return false;
+    } catch (error) {
+      lastError = error.toString();
+      return false;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
   }
 
   void verifyFace() {
     isFaceVerified = true;
+    _saveSilently();
     notifyListeners();
   }
 
   void approveKYC() {
-    kycStatus = "verified";
+    kycStatus = 'verified';
     addNotification(
-      "Compte vérifié",
-      "Félicitations, votre identité a été approuvée ! Limites de compte débloquées.",
-      "success"
+      'Compte vérifié',
+      'Votre identité a été approuvée.',
+      'success',
     );
+    _saveSilently();
     notifyListeners();
   }
 
   void rejectKYC() {
-    kycStatus = "rejected";
+    kycStatus = 'rejected';
     addNotification(
-      "KYC Rejeté",
-      "La vérification de votre identité a échoué. Veuillez soumettre une pièce valide.",
-      "security"
+      'KYC rejeté',
+      'Le dossier nécessite une nouvelle soumission.',
+      'security',
     );
+    _saveSilently();
     notifyListeners();
   }
 
   void resetKYC() {
-    kycStatus = "none";
+    kycStatus = 'none';
     uploadedDocType = null;
     uploadedDocName = null;
+    uploadedKycFileId = null;
+    uploadedSelfieFileId = null;
     isFaceVerified = false;
+    _saveSilently();
     notifyListeners();
   }
 
-  // Notifications helper
   void addNotification(String title, String content, String type) {
     notifications.insert(
       0,
       NotificationModel(
-        id: "N-${DateTime.now().millisecondsSinceEpoch}",
+        id: 'N-${DateTime.now().millisecondsSinceEpoch}',
         title: title,
         content: content,
         type: type,
         timestamp: DateTime.now(),
       ),
     );
-    notifyListeners();
+    _saveSilently();
   }
 
   void markAllNotificationsAsRead() {
-    for (var n in notifications) {
-      n.isRead = true;
+    for (final notification in notifications) {
+      notification.isRead = true;
     }
+    _saveSilently();
     notifyListeners();
   }
 
@@ -428,27 +559,216 @@ class AppState extends ChangeNotifier {
     final index = notifications.indexWhere((n) => n.id == id);
     if (index != -1) {
       notifications[index].isRead = true;
+      _saveSilently();
       notifyListeners();
     }
   }
 
   void toggleBiometrics() {
     biometricsEnabled = !biometricsEnabled;
+    _saveSilently();
     notifyListeners();
   }
 
   void toggle2FA() {
     twoFactorEnabled = !twoFactorEnabled;
+    _saveSilently();
     notifyListeners();
   }
 
   void removeDevice(String device) {
     activeDevices.remove(device);
     addNotification(
-      "Appareil révoqué",
-      "La session sur $device a été clôturée avec succès.",
-      "security"
+      'Appareil révoqué',
+      'La session sur $device a été supprimée.',
+      'security',
     );
+    _saveSilently();
     notifyListeners();
+  }
+
+  Future<void> _loadFromCloud(
+    String userId, {
+    String? fallbackName,
+    String? fallbackPhone,
+  }) async {
+    currentUserId = userId;
+    final prefs = await _appwriteService.getPrefs();
+
+    userName = prefs['userName']?.toString() ??
+        (fallbackName == null || fallbackName.isEmpty ? 'Utilisateur' : fallbackName);
+    userPhone = prefs['userPhone']?.toString() ?? (fallbackPhone ?? '');
+    walletAddress =
+        prefs['walletAddress']?.toString() ?? _buildWalletAddress(userId);
+    avatarInitials =
+        prefs['avatarInitials']?.toString() ?? _buildInitials(userName);
+    isMerchant = prefs['isMerchant'] == true;
+    language = prefs['language']?.toString() ?? 'fr';
+    biometricsEnabled = prefs['biometricsEnabled'] == true;
+    twoFactorEnabled = prefs['twoFactorEnabled'] == true;
+    kycStatus = prefs['kycStatus']?.toString() ?? 'none';
+    uploadedDocType = prefs['uploadedDocType']?.toString();
+    uploadedDocName = prefs['uploadedDocName']?.toString();
+    uploadedKycFileId = prefs['uploadedKycFileId']?.toString();
+    uploadedSelfieFileId = prefs['uploadedSelfieFileId']?.toString();
+    isFaceVerified = prefs['isFaceVerified'] == true;
+
+    final theme = prefs['themeMode']?.toString();
+    _themeMode = theme == 'light' ? ThemeMode.light : ThemeMode.dark;
+
+    final storedBalances = prefs['balances'];
+    balances
+      ..clear()
+      ..addAll(_parseBalanceMap(storedBalances));
+
+    transactions = _parseTransactions(prefs['transactions']);
+    offlineQueue = _parseTransactions(prefs['offlineQueue']);
+    notifications = _parseNotifications(prefs['notifications']);
+    activeDevices = _parseStringList(prefs['activeDevices']);
+
+    final storedPairings = prefs['pairedDevices'];
+    if (storedPairings is List) {
+      pairedDevices = storedPairings
+          .whereType<Map>()
+          .map((entry) => Map<String, dynamic>.from(entry))
+          .toList();
+    }
+  }
+
+  Future<void> _persistCloudState() async {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    await _appwriteService.updatePrefs({
+      'userName': userName,
+      'userPhone': userPhone,
+      'walletAddress': walletAddress,
+      'avatarInitials': avatarInitials,
+      'isMerchant': isMerchant,
+      'language': language,
+      'themeMode': _themeMode == ThemeMode.light ? 'light' : 'dark',
+      'balances': balances,
+      'transactions': transactions.map((tx) => tx.toMap()).toList(),
+      'offlineQueue': offlineQueue.map((tx) => tx.toMap()).toList(),
+      'notifications': notifications.map((n) => n.toMap()).toList(),
+      'activeDevices': activeDevices,
+      'pairedDevices': pairedDevices,
+      'kycStatus': kycStatus,
+      'uploadedDocType': uploadedDocType,
+      'uploadedDocName': uploadedDocName,
+      'uploadedKycFileId': uploadedKycFileId,
+      'uploadedSelfieFileId': uploadedSelfieFileId,
+      'isFaceVerified': isFaceVerified,
+      'biometricsEnabled': biometricsEnabled,
+      'twoFactorEnabled': twoFactorEnabled,
+    });
+  }
+
+  void _saveSilently() {
+    if (!isAuthenticated) {
+      return;
+    }
+    unawaited(_persistCloudState());
+  }
+
+  void _resetToGuestState() {
+    isAuthenticated = false;
+    currentUserId = '';
+    userName = 'Utilisateur';
+    userPhone = '';
+    walletAddress = '';
+    avatarInitials = 'PP';
+    isMerchant = false;
+    language = 'fr';
+    _themeMode = ThemeMode.dark;
+    balances
+      ..clear()
+      ..addAll({
+        'XOF': 0,
+        'USD': 0,
+        'PAPO': 0,
+        'BTC': 0,
+      });
+    transactions = [];
+    offlineQueue = [];
+    notifications = [];
+    activeDevices = [];
+    kycStatus = 'none';
+    uploadedDocType = null;
+    uploadedDocName = null;
+    uploadedKycFileId = null;
+    uploadedSelfieFileId = null;
+    isFaceVerified = false;
+    biometricsEnabled = false;
+    twoFactorEnabled = false;
+    _currentScreen = 'Onboarding';
+  }
+
+  Map<String, double> _parseBalanceMap(dynamic raw) {
+    final result = <String, double>{
+      'XOF': 0,
+      'USD': 0,
+      'PAPO': 0,
+      'BTC': 0,
+    };
+
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        result[entry.key.toString()] = (entry.value as num?)?.toDouble() ?? 0;
+      }
+    }
+    return result;
+  }
+
+  List<Transaction> _parseTransactions(dynamic raw) {
+    if (raw is! List) {
+      return [];
+    }
+    return raw
+        .whereType<Map>()
+        .map((entry) => Transaction.fromMap(Map<String, dynamic>.from(entry)))
+        .toList();
+  }
+
+  List<NotificationModel> _parseNotifications(dynamic raw) {
+    if (raw is! List) {
+      return [];
+    }
+    return raw
+        .whereType<Map>()
+        .map(
+          (entry) => NotificationModel.fromMap(
+            Map<String, dynamic>.from(entry),
+          ),
+        )
+        .toList();
+  }
+
+  List<String> _parseStringList(dynamic raw) {
+    if (raw is! List) {
+      return [];
+    }
+    return raw.map((entry) => entry.toString()).toList();
+  }
+
+  String _buildWalletAddress(String userId) {
+    final compact = userId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    return 'papo_${compact.substring(0, compact.length > 12 ? 12 : compact.length)}';
+  }
+
+  String _buildInitials(String value) {
+    final parts = value
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) {
+      return 'PP';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, parts.first.length > 1 ? 2 : 1).toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }

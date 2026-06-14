@@ -121,7 +121,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen> {
                       ),
                       const SizedBox(height: 48),
                       CustomButton(
-                        text: "Simuler la réussite de transmission",
+                        text: "Enregistrer la transmission locale",
                         onPressed: () {
                           final amount = double.tryParse(_amountController.text) ?? 0;
                           final recipient = _recipientController.text.trim();
@@ -232,7 +232,7 @@ class _SyncScreenState extends State<SyncScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Une fois le réseau rétabli, synchronisez vos paiements pour les inscrire définitivement dans la blockchain.",
+              "Une fois le réseau rétabli, synchronisez vos paiements pour les pousser vers Appwrite.",
               style: TextStyle(fontSize: 13, color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
             ),
             const SizedBox(height: 24),
