@@ -1,6 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
+import 'package:ndef/ndef.dart' as ndef;
 
 class NfcService {
   Future<String> pairAndGetPeerId() async {
@@ -8,12 +7,16 @@ class NfcService {
     try {
       tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 15));
       final peerId = tag.id;
-      await FlutterNfcKit.setNDEFRecords([
-        NDEFRecord.typeNameFormatWellKnown(
-          type: 'T'.codeUnits,
-          payload: utf8.encode('PAPO_PAIR:$peerId'),
-        )
-      ]);
+
+      if (tag.ndefWritable) {
+        await FlutterNfcKit.writeNDEFRecords([
+          ndef.TextRecord(
+            language: 'en',
+            text: 'PAPO_PAIR:$peerId',
+          ),
+        ]);
+      }
+
       return peerId;
     } finally {
       await FlutterNfcKit.finish();
