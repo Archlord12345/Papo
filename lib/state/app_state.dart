@@ -145,6 +145,7 @@ class AppState extends ChangeNotifier {
   String? uploadedDocType;
   String? uploadedDocName;
   String? uploadedKycFileId;
+  String? uploadedSelfieFileId;
   bool isFaceVerified = false;
 
   bool biometricsEnabled = false;
@@ -456,7 +457,7 @@ class AppState extends ChangeNotifier {
 
   Future<bool> uploadKYCDocument({
     required String type,
-    required PlatformFile documentFile,
+    PlatformFile? documentFile,
     PlatformFile? selfieFile,
   }) async {
     isBusy = true;
@@ -465,10 +466,12 @@ class AppState extends ChangeNotifier {
 
     try {
       uploadedDocType = type;
-      uploadedDocName = documentFile.name;
-      uploadedKycFileId = await _appwriteService.uploadUserFile(documentFile);
+      if (documentFile != null) {
+        uploadedDocName = documentFile.name;
+        uploadedKycFileId = await _appwriteService.uploadUserFile(documentFile);
+      }
       if (selfieFile != null) {
-        await _appwriteService.uploadUserFile(selfieFile);
+        uploadedSelfieFileId = await _appwriteService.uploadUserFile(selfieFile);
         isFaceVerified = true;
       }
       kycStatus = 'pending';
@@ -524,6 +527,7 @@ class AppState extends ChangeNotifier {
     uploadedDocType = null;
     uploadedDocName = null;
     uploadedKycFileId = null;
+    uploadedSelfieFileId = null;
     isFaceVerified = false;
     _saveSilently();
     notifyListeners();
@@ -606,6 +610,7 @@ class AppState extends ChangeNotifier {
     uploadedDocType = prefs['uploadedDocType']?.toString();
     uploadedDocName = prefs['uploadedDocName']?.toString();
     uploadedKycFileId = prefs['uploadedKycFileId']?.toString();
+    uploadedSelfieFileId = prefs['uploadedSelfieFileId']?.toString();
     isFaceVerified = prefs['isFaceVerified'] == true;
 
     final theme = prefs['themeMode']?.toString();
@@ -653,6 +658,7 @@ class AppState extends ChangeNotifier {
       'uploadedDocType': uploadedDocType,
       'uploadedDocName': uploadedDocName,
       'uploadedKycFileId': uploadedKycFileId,
+      'uploadedSelfieFileId': uploadedSelfieFileId,
       'isFaceVerified': isFaceVerified,
       'biometricsEnabled': biometricsEnabled,
       'twoFactorEnabled': twoFactorEnabled,
@@ -692,6 +698,7 @@ class AppState extends ChangeNotifier {
     uploadedDocType = null;
     uploadedDocName = null;
     uploadedKycFileId = null;
+    uploadedSelfieFileId = null;
     isFaceVerified = false;
     biometricsEnabled = false;
     twoFactorEnabled = false;

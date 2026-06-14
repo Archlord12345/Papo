@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/glass_card.dart';
@@ -71,6 +72,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalBalance = appState.balances.values.fold<double>(
+      0,
+      (sum, value) => sum + value.abs(),
+    );
     final unreadCount = appState.notifications.where((n) => !n.isRead).length;
 
     return Scaffold(
@@ -528,19 +533,44 @@ class WalletScreen extends StatelessWidget {
               const Text("Répartition du Portefeuille", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               
-              // fl_chart mock pie representation
               SizedBox(
                 height: 160,
                 child: PieChart(
                   PieChartData(
                     sectionsSpace: 4,
                     centerSpaceRadius: 40,
-                    sections: [
-                      PieChartSectionData(value: 70, color: AppColors.primary, title: "XOF", radius: 50, titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      PieChartSectionData(value: 15, color: AppColors.secondary, title: "USD", radius: 45, titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      PieChartSectionData(value: 10, color: AppColors.accent, title: "PAPO", radius: 40, titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      PieChartSectionData(value: 5, color: Colors.purple, title: "BTC", radius: 35, titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    ],
+                    sections: totalBalance == 0
+                        ? [
+                            PieChartSectionData(
+                              value: 1,
+                              color: AppColors.darkBorder,
+                              title: "0",
+                              radius: 42,
+                              titleStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ]
+                        : appState.balances.entries.map((entry) {
+                            final color = entry.key == "XOF"
+                                ? AppColors.primary
+                                : entry.key == "USD"
+                                    ? AppColors.secondary
+                                    : entry.key == "PAPO"
+                                        ? AppColors.accent
+                                        : Colors.purple;
+                            return PieChartSectionData(
+                              value: entry.value.abs(),
+                              color: color,
+                              title: entry.key,
+                              radius: 44,
+                              titleStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            );
+                          }).toList(),
                   ),
                 ),
               ),
@@ -602,8 +632,42 @@ class _SendMoneyScreenState extends State<SendMoneyScreen> {
   final _recipientController = TextEditingController();
   final _amountController = TextEditingController();
   final _nfcService = NfcService();
+  final _scannerController = MobileScannerController();
   String _selectedAsset = "XOF";
   bool _scanningQR = false;
+
+  @override
+  void dispose() {
+    _recipientController.dispose();
+    _amountController.dispose();
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  void _applyQrPayload(String rawValue) {
+    if (!rawValue.startsWith('papo:')) {
+      _recipientController.text = rawValue;
+      return;
+    }
+
+    final payload = rawValue.substring(5);
+    final uri = Uri.tryParse(payload);
+    if (uri == null) {
+      _recipientController.text = rawValue;
+      return;
+    }
+
+    _recipientController.text = uri.path.isEmpty ? rawValue : uri.path;
+    final qrAsset = uri.queryParameters['asset'];
+    final qrAmount = uri.queryParameters['amount'];
+
+    if (qrAsset != null && qrAsset.isNotEmpty) {
+      _selectedAsset = qrAsset;
+    }
+    if (qrAmount != null && qrAmount.isNotEmpty) {
+      _amountController.text = qrAmount;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -616,34 +680,42 @@ class _SendMoneyScreenState extends State<SendMoneyScreen> {
         appBar: AppBar(title: const Text("Scan QR Code")),
         body: Stack(
           children: [
+            MobileScanner(
+              controller: _scannerController,
+              onDetect: (capture) {
+                final barcode =
+                    capture.barcodes.isNotEmpty ? capture.barcodes.first : null;
+                final rawValue = barcode?.rawValue;
+                if (rawValue == null || !_scanningQR) {
+                  return;
+                }
+                setState(() {
+                  _applyQrPayload(rawValue);
+                  _scanningQR = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("QR détecté avec succès.")),
+                );
+              },
+            ),
             Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 250,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.primary, width: 4),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Icon(LucideIcons.qrCode, size: 100, color: AppColors.primary.withOpacity(0.5)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text("Pointez la caméra vers le code QR", style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 32),
-                  CustomButton(
-                    text: "Simuler la lecture du QR",
-                    onPressed: () {
-                      setState(() {
-                        _recipientController.text = "0x7a229a243fe8d363...";
-                        _scanningQR = false;
-                      });
-                    },
-                  ),
-                ],
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.primary, width: 3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+            const Positioned(
+              top: 32,
+              left: 24,
+              right: 24,
+              child: Text(
+                "Cadrez un QR PAYPOINT/PAPO pour remplir automatiquement le destinataire.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             Positioned(
@@ -726,10 +798,10 @@ class _SendMoneyScreenState extends State<SendMoneyScreen> {
                                     } catch (_) {
                                       if (!context.mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('NFC indisponible, mode simulation activé')),
+                                        const SnackBar(content: Text('NFC indisponible, saisissez le destinataire manuellement.')),
                                       );
                                       setState(() {
-                                        _recipientController.text = "+225 01 02 03 04 05";
+                                        _recipientController.text = "";
                                       });
                                       Navigator.pop(context);
                                     }
@@ -952,11 +1024,13 @@ class _ReceiveMoneyScreenState extends State<ReceiveMoneyScreen> {
                               try {
                                 await _nfcService.readIncomingPaymentRequest();
                               } catch (_) {}
-                              final amt = double.tryParse(_amountController.text) ?? 5000;
-                              appState.receiveMoney(amt, _selectedAsset);
                               if (!context.mounted) return;
                               Navigator.pop(context);
-                              appState.setScreen("Dashboard");
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Canal NFC prêt. Attendez l'envoi réel du payeur."),
+                                ),
+                              );
                             },
                           ),
                         ],
