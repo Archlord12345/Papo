@@ -1,0 +1,28 @@
+name: Browser Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  browser-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@latest
+      - name: Install dependencies
+        run: flutter pub get
+      # Placeholder command: 
+      # Implementation: Create integration tests in `integration_test/` directory.
+      # Command to run: flutter drive --target=integration_test/app_test.dart -d web-server
+      - name: Run browser integration tests
+        run: |
+          echo "Browser tests infrastructure ready. Please implement integration tests in the integration_test/ directory."
+          # flutter drive --target=integration_test/app_test.dart -d web-server
