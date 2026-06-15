@@ -276,7 +276,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                "Sélectionnez un selfie récent pour l'associer à votre dossier KYC Appwrite.",
+                "Sélectionnez un selfie récent pour l'associer à votre dossier KYC PocketBase.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -362,7 +362,7 @@ class KYCStatusScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Votre document ${appState.uploadedDocName ?? ''} et votre selfie sont stockés sur Appwrite et attendent validation.',
+              'Votre document ${appState.uploadedDocName ?? ''} et votre selfie sont stockés sur PocketBase et attendent validation.',
               textAlign: TextAlign.center,
             ),
           ],

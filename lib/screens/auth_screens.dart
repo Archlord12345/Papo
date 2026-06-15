@@ -111,8 +111,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final List<Map<String, String>> _pages = const [
     {
-      'title': 'Compte Appwrite Réel',
-      'desc': 'Authentification, préférences et documents sont sauvegardés sur Appwrite.',
+      'title': 'Compte PocketBase Réel',
+      'desc': 'Authentification, préférences et documents sont sauvegardés sur PocketBase.',
     },
     {
       'title': 'QR Fonctionnel',
@@ -120,7 +120,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
     {
       'title': 'KYC Stocké',
-      'desc': 'Les documents KYC sont téléversés dans Appwrite Storage.',
+      'desc': 'Les documents KYC sont téléversés dans PocketBase Storage.',
     },
   ];
 
@@ -273,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Connexion Appwrite directe avec votre numéro et votre PIN.',
+                'Connexion PocketBase directe avec votre numéro et votre PIN.',
                 style: TextStyle(
                   color: isDark
                       ? AppColors.textDarkSecondary
@@ -406,7 +406,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Votre compte et vos données seront créés directement dans Appwrite.',
+                'Votre compte et vos données seront créés directement dans PocketBase.',
                 style: TextStyle(
                   color: isDark
                       ? AppColors.textDarkSecondary
@@ -526,7 +526,7 @@ class OtpScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              "Cette étape n'est plus utilisée dans le flux principal. L'application passe désormais par une session Appwrite directe.",
+              "Cette étape n'est plus utilisée dans le flux principal. L'application passe désormais par une session PocketBase directe.",
             ),
             const SizedBox(height: 32),
             CustomButton(
@@ -563,7 +563,7 @@ class ForgotPasswordScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              "La réinitialisation automatique n'est pas encore disponible sans configuration complémentaire Appwrite. Connectez-vous puis modifiez votre PIN depuis l'espace sécurité.",
+              "La réinitialisation automatique n'est pas encore disponible sans configuration complémentaire PocketBase. Connectez-vous puis modifiez votre PIN depuis l'espace sécurité.",
             ),
             const SizedBox(height: 32),
             CustomButton(
@@ -615,7 +615,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Mettez à jour votre code PIN Appwrite depuis la session active.',
+              'Mettez à jour votre code PIN PocketBase depuis la session active.',
             ),
             const SizedBox(height: 32),
             CustomInput(
@@ -715,7 +715,7 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen> {
               ),
               const SizedBox(height: 12),
               const Text(
-                "La biométrie matérielle n'est pas encore branchée. Cette entrée réutilise simplement la session Appwrite déjà ouverte.",
+                "La biométrie matérielle n'est pas encore branchée. Cette entrée réutilise simplement la session PocketBase déjà ouverte.",
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),

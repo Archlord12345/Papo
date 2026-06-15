@@ -476,6 +476,10 @@ class WalletScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalBalance = appState.balances.values.fold<double>(
+      0,
+      (sum, value) => sum + value.abs(),
+    );
 
     return Scaffold(
       drawer: const ScreenExplorer(),
