@@ -8,7 +8,7 @@ class NfcService {
       tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 15));
       final peerId = tag.id;
 
-      if (tag.ndefWritable) {
+      if (tag.ndefWritable == true) {
         await FlutterNfcKit.writeNDEFRecords([
           ndef.TextRecord(
             language: 'en',

@@ -232,7 +232,7 @@ class _SyncScreenState extends State<SyncScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Une fois le réseau rétabli, synchronisez vos paiements pour les pousser vers Appwrite.",
+              "Une fois le réseau rétabli, synchronisez vos paiements pour les pousser vers PocketBase.",
               style: TextStyle(fontSize: 13, color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
             ),
             const SizedBox(height: 24),

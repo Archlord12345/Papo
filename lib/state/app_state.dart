@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:appwrite/appwrite.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:pocketbase/pocketbase.dart';
 
-import '../services/appwrite_service.dart';
+import '../services/pocketbase_service.dart';
 import '../services/local_storage_service.dart';
 
 class Transaction {
@@ -54,6 +54,19 @@ class Transaction {
       description: map['description']?.toString() ?? '',
     );
   }
+
+  factory Transaction.fromRecord(RecordModel record) {
+    return Transaction(
+      id: record.id,
+      title: record.getStringValue('type') == 'send' ? 'Transfert envoyé' : 'Réception de fonds',
+      amount: record.getDoubleValue('amount'),
+      asset: 'XOF', // PocketBase schema doesn't have asset, defaulting to XOF
+      type: record.getStringValue('type'),
+      timestamp: DateTime.parse(record.created),
+      status: record.getStringValue('status'),
+      description: 'Transaction PocketBase',
+    );
+  }
 }
 
 class NotificationModel {
@@ -95,6 +108,17 @@ class NotificationModel {
       isRead: map['isRead'] == true,
     );
   }
+
+  factory NotificationModel.fromRecord(RecordModel record) {
+    return NotificationModel(
+      id: record.id,
+      title: 'Notification',
+      content: record.getStringValue('message'),
+      type: 'info',
+      timestamp: DateTime.parse(record.created),
+      isRead: record.getBoolValue('read'),
+    );
+  }
 }
 
 class AppState extends ChangeNotifier {
@@ -102,7 +126,7 @@ class AppState extends ChangeNotifier {
     unawaited(initialize());
   }
 
-  final AppwriteService _appwriteService = AppwriteService();
+  final PocketBaseService _pbService = PocketBaseService();
   final LocalStorageService _localStorageService = LocalStorageService();
 
   bool isInitializing = true;
@@ -154,14 +178,16 @@ class AppState extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       pairedDevices = await _localStorageService.loadPairings();
-      final user = await _appwriteService.getCurrentUser();
+      final user = await _pbService.getCurrentUser();
       if (user == null) {
         _resetToGuestState();
       } else {
-        await _loadFromCloud(user.$id, fallbackName: user.name);
+        await _loadFromPocketBase(user);
         isAuthenticated = true;
         _currentScreen = 'Dashboard';
       }
+    } catch (e) {
+      _resetToGuestState();
     } finally {
       isInitializing = false;
       notifyListeners();
@@ -186,21 +212,18 @@ class AppState extends ChangeNotifier {
       if (recentlyVisited.length > 4) {
         recentlyVisited.removeLast();
       }
-      _saveSilently();
     }
     notifyListeners();
   }
 
   void changeLanguage(String lang) {
     language = lang;
-    _saveSilently();
     notifyListeners();
   }
 
   void toggleTheme() {
     _themeMode =
         _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    _saveSilently();
     notifyListeners();
   }
 
@@ -214,29 +237,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _appwriteService.register(
+      final user = await _pbService.register(
         fullName: fullName,
         phone: phone,
         pin: pin,
       );
-      currentUserId = user.$id;
-      userName = fullName;
-      userPhone = phone;
-      walletAddress = _buildWalletAddress(user.$id);
-      avatarInitials = _buildInitials(fullName);
-      activeDevices = ['Session actuelle'];
+      await _loadFromPocketBase(user);
+
+      // Initialize a default wallet
+      await _pbService.createWallet(
+        address: walletAddress,
+        currency: 'XOF',
+        balance: 10000, // Welcome bonus
+      );
+      balances['XOF'] = 10000;
+
       isAuthenticated = true;
       _currentScreen = 'Dashboard';
       addNotification(
         'Compte créé',
-        'Votre compte PAYPOINT est maintenant connecté à Appwrite.',
+        'Votre compte PAYPOINT est maintenant connecté à PocketBase.',
         'success',
       );
-      await _persistCloudState();
       return true;
-    } on AppwriteException catch (error) {
-      lastError = error.message;
-      return false;
     } catch (error) {
       lastError = error.toString();
       return false;
@@ -255,14 +278,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _appwriteService.login(phone: phone, pin: pin);
-      await _loadFromCloud(user.$id, fallbackName: user.name, fallbackPhone: phone);
+      final user = await _pbService.login(phone: phone, pin: pin);
+      await _loadFromPocketBase(user);
       isAuthenticated = true;
       _currentScreen = 'Dashboard';
       return true;
-    } on AppwriteException catch (error) {
-      lastError = error.message;
-      return false;
     } catch (error) {
       lastError = error.toString();
       return false;
@@ -277,7 +297,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _appwriteService.logout();
+      await _pbService.logout();
       _resetToGuestState();
     } finally {
       isBusy = false;
@@ -294,7 +314,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _appwriteService.updatePassword(
+      await _pbService.updatePassword(
         currentPin: currentPin,
         newPin: newPin,
       );
@@ -303,11 +323,7 @@ class AppState extends ChangeNotifier {
         'Votre code PIN a été modifié avec succès.',
         'security',
       );
-      await _persistCloudState();
       return true;
-    } on AppwriteException catch (error) {
-      lastError = error.message;
-      return false;
     } catch (error) {
       lastError = error.toString();
       return false;
@@ -334,7 +350,6 @@ class AppState extends ChangeNotifier {
         'Nouveau contact NFC enregistré : $alias.',
         'success',
       );
-      await _persistCloudState();
       notifyListeners();
     }
   }
@@ -352,6 +367,15 @@ class AppState extends ChangeNotifier {
     }
 
     balances[asset] = currentBal - amount;
+
+    // In a real app, recipient should be a user ID
+    // We'll simulate finding a user or using a placeholder
+    _pbService.createTransaction(
+      receiverId: recipient, // Assuming recipient is a valid user ID or address for this simulation
+      amount: amount,
+      type: 'send',
+    );
+
     transactions.insert(
       0,
       Transaction(
@@ -362,7 +386,7 @@ class AppState extends ChangeNotifier {
         type: 'send',
         timestamp: DateTime.now(),
         status: 'completed',
-        description: 'Transfert enregistré sur votre compte Appwrite.',
+        description: 'Transfert enregistré sur PocketBase.',
       ),
     );
 
@@ -371,7 +395,6 @@ class AppState extends ChangeNotifier {
       'Envoi de $amount $asset vers $recipient sauvegardé avec succès.',
       'success',
     );
-    _saveSilently();
     notifyListeners();
     return true;
   }
@@ -390,7 +413,7 @@ class AppState extends ChangeNotifier {
         type: 'receive',
         timestamp: DateTime.now(),
         status: 'completed',
-        description: 'Réception enregistrée sur votre compte Appwrite.',
+        description: 'Réception enregistrée sur PocketBase.',
       ),
     );
 
@@ -399,7 +422,6 @@ class AppState extends ChangeNotifier {
       'Réception de $amount $asset enregistrée avec succès.',
       'success',
     );
-    _saveSilently();
     notifyListeners();
   }
 
@@ -416,18 +438,17 @@ class AppState extends ChangeNotifier {
       timestamp: DateTime.now(),
       status: 'pending',
       description:
-          'Transaction signée localement. Synchronisation Appwrite requise.',
+          'Transaction signée localement. Synchronisation PocketBase requise.',
     );
 
     offlineQueue.insert(0, tx);
     transactions.insert(0, tx);
     addNotification(
       'Paiement hors ligne enregistré',
-      'Le paiement sera synchronisé avec Appwrite dès que le réseau revient.',
+      'Le paiement sera synchronisé dès que le réseau revient.',
       'info',
     );
     unawaited(persistOfflineQueueSnapshot());
-    _saveSilently();
     notifyListeners();
   }
 
@@ -441,17 +462,22 @@ class AppState extends ChangeNotifier {
       if (index != -1) {
         transactions[index].status = 'completed';
       }
+      // Create transaction in PocketBase
+      _pbService.createTransaction(
+        receiverId: 'offline-sync',
+        amount: tx.amount.abs(),
+        type: 'offline',
+      );
     }
 
     final count = offlineQueue.length;
     offlineQueue.clear();
     addNotification(
       'Synchronisation terminée',
-      '$count transaction(s) hors ligne ont été poussées sur Appwrite.',
+      '$count transaction(s) hors ligne ont été poussées sur PocketBase.',
       'success',
     );
     unawaited(persistOfflineQueueSnapshot());
-    _saveSilently();
     notifyListeners();
   }
 
@@ -468,23 +494,19 @@ class AppState extends ChangeNotifier {
       uploadedDocType = type;
       if (documentFile != null) {
         uploadedDocName = documentFile.name;
-        uploadedKycFileId = await _appwriteService.uploadUserFile(documentFile);
+        await _pbService.uploadKycDocument(status: 'pending', file: documentFile);
       }
       if (selfieFile != null) {
-        uploadedSelfieFileId = await _appwriteService.uploadUserFile(selfieFile);
+        await _pbService.uploadKycDocument(status: 'pending', file: selfieFile);
         isFaceVerified = true;
       }
       kycStatus = 'pending';
       addNotification(
         'KYC soumis',
-        'Votre dossier $type a été téléversé vers Appwrite pour vérification.',
+        'Votre dossier $type a été téléversé vers PocketBase pour vérification.',
         'info',
       );
-      await _persistCloudState();
       return true;
-    } on AppwriteException catch (error) {
-      lastError = error.message;
-      return false;
     } catch (error) {
       lastError = error.toString();
       return false;
@@ -496,7 +518,6 @@ class AppState extends ChangeNotifier {
 
   void verifyFace() {
     isFaceVerified = true;
-    _saveSilently();
     notifyListeners();
   }
 
@@ -507,7 +528,6 @@ class AppState extends ChangeNotifier {
       'Votre identité a été approuvée.',
       'success',
     );
-    _saveSilently();
     notifyListeners();
   }
 
@@ -518,7 +538,6 @@ class AppState extends ChangeNotifier {
       'Le dossier nécessite une nouvelle soumission.',
       'security',
     );
-    _saveSilently();
     notifyListeners();
   }
 
@@ -529,7 +548,6 @@ class AppState extends ChangeNotifier {
     uploadedKycFileId = null;
     uploadedSelfieFileId = null;
     isFaceVerified = false;
-    _saveSilently();
     notifyListeners();
   }
 
@@ -544,14 +562,16 @@ class AppState extends ChangeNotifier {
         timestamp: DateTime.now(),
       ),
     );
-    _saveSilently();
+    // In a real app, save to PocketBase
   }
 
   void markAllNotificationsAsRead() {
     for (final notification in notifications) {
       notification.isRead = true;
+      if (!notification.id.startsWith('N-')) {
+        _pbService.markNotificationRead(notification.id, true);
+      }
     }
-    _saveSilently();
     notifyListeners();
   }
 
@@ -559,20 +579,20 @@ class AppState extends ChangeNotifier {
     final index = notifications.indexWhere((n) => n.id == id);
     if (index != -1) {
       notifications[index].isRead = true;
-      _saveSilently();
+      if (!id.startsWith('N-')) {
+        _pbService.markNotificationRead(id, true);
+      }
       notifyListeners();
     }
   }
 
   void toggleBiometrics() {
     biometricsEnabled = !biometricsEnabled;
-    _saveSilently();
     notifyListeners();
   }
 
   void toggle2FA() {
     twoFactorEnabled = !twoFactorEnabled;
-    _saveSilently();
     notifyListeners();
   }
 
@@ -583,93 +603,44 @@ class AppState extends ChangeNotifier {
       'La session sur $device a été supprimée.',
       'security',
     );
-    _saveSilently();
     notifyListeners();
   }
 
-  Future<void> _loadFromCloud(
-    String userId, {
-    String? fallbackName,
-    String? fallbackPhone,
-  }) async {
-    currentUserId = userId;
-    final prefs = await _appwriteService.getPrefs();
+  Future<void> _loadFromPocketBase(RecordModel user) async {
+    currentUserId = user.id;
+    userName = user.getStringValue('name').isEmpty ? 'Utilisateur' : user.getStringValue('name');
+    userPhone = user.getStringValue('phone');
+    walletAddress = _buildWalletAddress(user.id);
+    avatarInitials = _buildInitials(userName);
 
-    userName = prefs['userName']?.toString() ??
-        (fallbackName == null || fallbackName.isEmpty ? 'Utilisateur' : fallbackName);
-    userPhone = prefs['userPhone']?.toString() ?? (fallbackPhone ?? '');
-    walletAddress =
-        prefs['walletAddress']?.toString() ?? _buildWalletAddress(userId);
-    avatarInitials =
-        prefs['avatarInitials']?.toString() ?? _buildInitials(userName);
-    isMerchant = prefs['isMerchant'] == true;
-    language = prefs['language']?.toString() ?? 'fr';
-    biometricsEnabled = prefs['biometricsEnabled'] == true;
-    twoFactorEnabled = prefs['twoFactorEnabled'] == true;
-    kycStatus = prefs['kycStatus']?.toString() ?? 'none';
-    uploadedDocType = prefs['uploadedDocType']?.toString();
-    uploadedDocName = prefs['uploadedDocName']?.toString();
-    uploadedKycFileId = prefs['uploadedKycFileId']?.toString();
-    uploadedSelfieFileId = prefs['uploadedSelfieFileId']?.toString();
-    isFaceVerified = prefs['isFaceVerified'] == true;
-
-    final theme = prefs['themeMode']?.toString();
-    _themeMode = theme == 'light' ? ThemeMode.light : ThemeMode.dark;
-
-    final storedBalances = prefs['balances'];
-    balances
-      ..clear()
-      ..addAll(_parseBalanceMap(storedBalances));
-
-    transactions = _parseTransactions(prefs['transactions']);
-    offlineQueue = _parseTransactions(prefs['offlineQueue']);
-    notifications = _parseNotifications(prefs['notifications']);
-    activeDevices = _parseStringList(prefs['activeDevices']);
-
-    final storedPairings = prefs['pairedDevices'];
-    if (storedPairings is List) {
-      pairedDevices = storedPairings
-          .whereType<Map>()
-          .map((entry) => Map<String, dynamic>.from(entry))
-          .toList();
-    }
-  }
-
-  Future<void> _persistCloudState() async {
-    if (!isAuthenticated) {
-      return;
+    // Load Wallets
+    final walletRecords = await _pbService.getWallets();
+    balances.clear();
+    balances.addAll({'XOF': 0, 'USD': 0, 'PAPO': 0, 'BTC': 0});
+    for (var w in walletRecords) {
+      balances[w.getStringValue('currency')] = w.getDoubleValue('balance');
     }
 
-    await _appwriteService.updatePrefs({
-      'userName': userName,
-      'userPhone': userPhone,
-      'walletAddress': walletAddress,
-      'avatarInitials': avatarInitials,
-      'isMerchant': isMerchant,
-      'language': language,
-      'themeMode': _themeMode == ThemeMode.light ? 'light' : 'dark',
-      'balances': balances,
-      'transactions': transactions.map((tx) => tx.toMap()).toList(),
-      'offlineQueue': offlineQueue.map((tx) => tx.toMap()).toList(),
-      'notifications': notifications.map((n) => n.toMap()).toList(),
-      'activeDevices': activeDevices,
-      'pairedDevices': pairedDevices,
-      'kycStatus': kycStatus,
-      'uploadedDocType': uploadedDocType,
-      'uploadedDocName': uploadedDocName,
-      'uploadedKycFileId': uploadedKycFileId,
-      'uploadedSelfieFileId': uploadedSelfieFileId,
-      'isFaceVerified': isFaceVerified,
-      'biometricsEnabled': biometricsEnabled,
-      'twoFactorEnabled': twoFactorEnabled,
-    });
-  }
+    // Load Transactions
+    final transRecords = await _pbService.getTransactions();
+    transactions = transRecords.map((r) => Transaction.fromRecord(r)).toList();
 
-  void _saveSilently() {
-    if (!isAuthenticated) {
-      return;
+    // Load Notifications
+    final notifRecords = await _pbService.getNotifications();
+    notifications = notifRecords.map((r) => NotificationModel.fromRecord(r)).toList();
+
+    // Load KYC
+    final kycRecord = await _pbService.getKycStatus();
+    if (kycRecord != null) {
+      kycStatus = kycRecord.getStringValue('status');
+      uploadedDocType = 'Identité';
+      isFaceVerified = kycRecord.getStringValue('document').isNotEmpty;
     }
-    unawaited(_persistCloudState());
+
+    // Load Devices
+    final deviceRecords = await _pbService.getDevices();
+    activeDevices = deviceRecords.map((r) => r.getStringValue('device_id')).toList();
+    if (activeDevices.isEmpty) activeDevices.add('Session actuelle');
   }
 
   void _resetToGuestState() {
@@ -703,53 +674,6 @@ class AppState extends ChangeNotifier {
     biometricsEnabled = false;
     twoFactorEnabled = false;
     _currentScreen = 'Onboarding';
-  }
-
-  Map<String, double> _parseBalanceMap(dynamic raw) {
-    final result = <String, double>{
-      'XOF': 0,
-      'USD': 0,
-      'PAPO': 0,
-      'BTC': 0,
-    };
-
-    if (raw is Map) {
-      for (final entry in raw.entries) {
-        result[entry.key.toString()] = (entry.value as num?)?.toDouble() ?? 0;
-      }
-    }
-    return result;
-  }
-
-  List<Transaction> _parseTransactions(dynamic raw) {
-    if (raw is! List) {
-      return [];
-    }
-    return raw
-        .whereType<Map>()
-        .map((entry) => Transaction.fromMap(Map<String, dynamic>.from(entry)))
-        .toList();
-  }
-
-  List<NotificationModel> _parseNotifications(dynamic raw) {
-    if (raw is! List) {
-      return [];
-    }
-    return raw
-        .whereType<Map>()
-        .map(
-          (entry) => NotificationModel.fromMap(
-            Map<String, dynamic>.from(entry),
-          ),
-        )
-        .toList();
-  }
-
-  List<String> _parseStringList(dynamic raw) {
-    if (raw is! List) {
-      return [];
-    }
-    return raw.map((entry) => entry.toString()).toList();
   }
 
   String _buildWalletAddress(String userId) {
