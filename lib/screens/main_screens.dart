@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -44,12 +45,12 @@ Widget buildBottomNavBar(BuildContext context, int currentIndex) {
           break;
       }
     },
-    items: const [
-      BottomNavigationBarItem(icon: Icon(LucideIcons.layoutDashboard), label: "Accueil"),
-      BottomNavigationBarItem(icon: Icon(LucideIcons.wallet), label: "Wallet"),
-      BottomNavigationBarItem(icon: Icon(LucideIcons.send), label: "Envoyer"),
-      BottomNavigationBarItem(icon: Icon(LucideIcons.history), label: "Historique"),
-      BottomNavigationBarItem(icon: Icon(LucideIcons.grid), label: "Plus"),
+    items: [
+      BottomNavigationBarItem(icon: SvgPicture.asset('assets/svg/dashboard.svg', width: 24, height: 24), label: "Accueil"),
+      BottomNavigationBarItem(icon: SvgPicture.asset('assets/svg/wallet.svg', width: 24, height: 24), label: "Wallet"),
+      BottomNavigationBarItem(icon: SvgPicture.asset('assets/svg/scanner.svg', width: 24, height: 24), label: "Paiement"),
+      BottomNavigationBarItem(icon: SvgPicture.asset('assets/svg/update.svg', width: 24, height: 24), label: "Historique"),
+      BottomNavigationBarItem(icon: SvgPicture.asset('assets/svg/profile.svg', width: 24, height: 24), label: "Menu"),
     ],
   );
 }
@@ -360,33 +361,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
 Widget _buildTransactionItem(BuildContext context, Transaction tx) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   
-  IconData icon;
-  Color iconColor;
+  String gifPath;
   switch (tx.type) {
     case 'send':
-      icon = LucideIcons.arrowUpRight;
-      iconColor = AppColors.danger;
+      gifPath = 'assets/gifs/send.gif';
       break;
     case 'receive':
-      icon = LucideIcons.arrowDownLeft;
-      iconColor = AppColors.success;
+      gifPath = 'assets/gifs/receive.gif';
       break;
     case 'offline':
-      icon = LucideIcons.wifiOff;
-      iconColor = AppColors.warning;
+      gifPath = 'assets/gifs/offline.gif';
       break;
     default:
-      icon = LucideIcons.store;
-      iconColor = AppColors.secondary;
+      gifPath = 'assets/gifs/menu.gif'; // Placeholder
   }
 
   return Card(
     margin: const EdgeInsets.symmetric(vertical: 6),
     child: ListTile(
-      leading: CircleAvatar(
-        backgroundColor: iconColor.withOpacity(0.1),
-        child: Icon(icon, color: iconColor, size: 20),
-      ),
+      leading: Image.asset(gifPath, width: 40, height: 40),
       title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
       subtitle: Row(
         children: [
@@ -545,23 +538,67 @@ class WalletScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              
+
+              // Add Funds Button
+              CustomButton(
+                text: "Déposer des fonds (Simulation)",
+                icon: const Icon(LucideIcons.plusCircle, color: Colors.white),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      final controller = TextEditingController();
+                      String asset = "XOF";
+                      return AlertDialog(
+                        title: const Text("Dépôt de fonds"),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            DropdownButton<String>(
+                              value: asset,
+                              isExpanded: true,
+                              items: appState.balances.keys.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                              onChanged: (v) => asset = v!,
+                            ),
+                            const SizedBox(height: 12),
+                            CustomInput(label: "Montant", hint: "0", controller: controller, keyboardType: TextInputType.number),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Annuler")),
+                          TextButton(
+                            onPressed: () {
+                              final amt = double.tryParse(controller.text) ?? 0;
+                              if (amt > 0) {
+                                appState.topUp(amt, asset);
+                                Navigator.pop(context);
+                              }
+                            },
+                            child: const Text("Déposer"),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
               // Add Contract Token Simulator Button
               CustomButton(
                 text: "+ Importer un token personnalisé",
                 isPrimary: false,
+                icon: SvgPicture.asset('assets/svg/scanner.svg', width: 20, height: 20, colorFilter: const ColorFilter.mode(AppColors.primary, BlendMode.srcIn)),
                 onPressed: () {
-                  // Simulate adding token
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text("Importer un Token"),
-                      content: Column(
+                      content: const Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CustomInput(label: "Adresse du Smart Contract", hint: "0x..."),
-                          const SizedBox(height: 12),
-                          const CustomInput(label: "Symbole du Token", hint: "ex: WOF"),
+                          CustomInput(label: "Adresse du Smart Contract", hint: "0x..."),
+                          SizedBox(height: 12),
+                          CustomInput(label: "Symbole du Token", hint: "ex: WOF"),
                         ],
                       ),
                       actions: [

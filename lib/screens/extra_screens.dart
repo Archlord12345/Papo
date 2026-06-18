@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../state/app_state.dart';
@@ -466,7 +467,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildMemberRow("Mamadou Diallo (Vous)", "Payé le 22/05", true, isDark),
+                  _buildMemberRow("${appState.userName} (Vous)", "Payé le 22/05", true, isDark),
                   _buildMemberRow("Fatou Sy", "Payé le 20/05", true, isDark),
                   _buildMemberRow("Kouassi Yao", "Payé le 19/05", true, isDark),
                   _buildMemberRow("Awa Diop", "En attente", false, isDark),
@@ -1154,7 +1155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text("Mon Profil"),
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.settings),
+            icon: SvgPicture.asset('assets/svg/settings.svg', width: 24, height: 24, colorFilter: ColorFilter.mode(isDark ? Colors.white : Colors.black, BlendMode.srcIn)),
             onPressed: () => appState.setScreen("SecuritySettings"),
             tooltip: "Sécurité",
           ),
@@ -1393,7 +1394,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ListTile(
                           leading: const Icon(LucideIcons.logOut, color: AppColors.danger),
                           title: const Text("Déconnexion", style: TextStyle(fontSize: 13, color: AppColors.danger)),
-                          onTap: () => appState.setScreen("Login"),
+                          onTap: () => appState.logout(),
                         ),
                       ],
                     ),

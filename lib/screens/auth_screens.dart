@@ -36,10 +36,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
     _controller.forward();
 
-    // Auto-navigate to Onboarding after 2.5 seconds
+    // Auto-navigate after 2.5 seconds
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        Provider.of<AppState>(context, listen: false).setScreen("Onboarding");
+        final appState = Provider.of<AppState>(context, listen: false);
+        if (appState.isLoggedIn) {
+          appState.setScreen("Dashboard");
+        } else {
+          appState.setScreen("Onboarding");
+        }
       }
     });
   }
@@ -294,8 +299,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 // ==========================================
 // 3. LOGIN SCREEN
 // ==========================================
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _pinController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -325,18 +338,20 @@ class LoginScreen extends StatelessWidget {
                 style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
               ),
               const SizedBox(height: 32),
-              const CustomInput(
+              CustomInput(
                 label: "Numéro de Téléphone",
                 hint: "ex: +225 07 08 09 10 11",
                 prefixIcon: LucideIcons.phone,
                 keyboardType: TextInputType.phone,
+                controller: _phoneController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Mot de passe",
                 hint: "Saisissez votre code PIN/mot de passe",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
+                controller: _pinController,
               ),
               const SizedBox(height: 12),
               Align(
@@ -351,8 +366,15 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: 24),
               CustomButton(
                 text: "Se Connecter",
-                onPressed: () {
-                  appState.setScreen("OTP");
+                onPressed: () async {
+                  bool success = await appState.login(_phoneController.text, _pinController.text);
+                  if (success) {
+                    appState.setScreen("Dashboard");
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Identifiants incorrects")),
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 20),
@@ -362,7 +384,13 @@ class LoginScreen extends StatelessWidget {
                 isPrimary: false,
                 icon: const Icon(LucideIcons.fingerprint, color: AppColors.primary),
                 onPressed: () {
-                  appState.setScreen("BiometricLogin");
+                  if (appState.userPhone.isNotEmpty) {
+                    appState.setScreen("BiometricLogin");
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Veuillez d'abord vous connecter manuellement")),
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 48),
@@ -390,8 +418,18 @@ class LoginScreen extends StatelessWidget {
 // ==========================================
 // 4. REGISTER SCREEN
 // ==========================================
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _pinController = TextEditingController();
+  final TextEditingController _confirmPinController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -417,38 +455,56 @@ class RegisterScreen extends StatelessWidget {
                 style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
               ),
               const SizedBox(height: 32),
-              const CustomInput(
+              CustomInput(
                 label: "Nom complet",
                 hint: "ex: Mamadou Diallo",
                 prefixIcon: LucideIcons.user,
+                controller: _nameController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Numéro de Téléphone",
                 hint: "ex: +225 07 08 09 10 11",
                 prefixIcon: LucideIcons.phone,
                 keyboardType: TextInputType.phone,
+                controller: _phoneController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Mot de passe (PIN)",
                 hint: "Code PIN secret à 6 chiffres",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
                 keyboardType: TextInputType.number,
+                controller: _pinController,
               ),
               const SizedBox(height: 20),
-              const CustomInput(
+              CustomInput(
                 label: "Confirmer le code PIN",
                 hint: "Saisissez à nouveau votre code PIN",
                 prefixIcon: LucideIcons.lock,
                 isPassword: true,
                 keyboardType: TextInputType.number,
+                controller: _confirmPinController,
               ),
               const SizedBox(height: 24),
               CustomButton(
                 text: "S'inscrire",
-                onPressed: () {
+                onPressed: () async {
+                  if (_pinController.text != _confirmPinController.text) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Les codes PIN ne correspondent pas")),
+                    );
+                    return;
+                  }
+                  if (_pinController.text.length < 4) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Le code PIN doit faire au moins 4 chiffres")),
+                    );
+                    return;
+                  }
+                  
+                  await appState.register(_nameController.text, _phoneController.text, _pinController.text);
                   appState.setScreen("OTP");
                 },
               ),

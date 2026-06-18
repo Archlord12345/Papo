@@ -127,7 +127,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                       child: QrImageView(
-                        data: "papo:merchant/${appState.walletAddress}?name=Boutique%20Mamadou",
+                        data: "papo:merchant/${appState.walletAddress}?name=Boutique%20${appState.userName.replaceAll(' ', '%20')}",
                         version: QrVersions.auto,
                         size: 150.0,
                       ),

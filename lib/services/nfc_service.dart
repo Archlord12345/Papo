@@ -8,12 +8,6 @@ class NfcService {
     try {
       tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 15));
       final peerId = tag.id;
-      await FlutterNfcKit.setNDEFRecords([
-        NDEFRecord.typeNameFormatWellKnown(
-          type: 'T'.codeUnits,
-          payload: utf8.encode('PAPO_PAIR:$peerId'),
-        )
-      ]);
       return peerId;
     } finally {
       await FlutterNfcKit.finish();

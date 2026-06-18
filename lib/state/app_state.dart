@@ -22,6 +22,28 @@ class Transaction {
     required this.status,
     required this.description,
   });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'amount': amount,
+    'asset': asset,
+    'type': type,
+    'timestamp': timestamp.toIso8601String(),
+    'status': status,
+    'description': description,
+  };
+
+  factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
+    id: map['id'],
+    title: map['title'],
+    amount: (map['amount'] as num).toDouble(),
+    asset: map['asset'],
+    type: map['type'],
+    timestamp: DateTime.parse(map['timestamp']),
+    status: map['status'],
+    description: map['description'],
+  );
 }
 
 class NotificationModel {
@@ -40,6 +62,24 @@ class NotificationModel {
     required this.timestamp,
     this.isRead = false,
   });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'content': content,
+    'type': type,
+    'timestamp': timestamp.toIso8601String(),
+    'isRead': isRead,
+  };
+
+  factory NotificationModel.fromMap(Map<String, dynamic> map) => NotificationModel(
+    id: map['id'],
+    title: map['title'],
+    content: map['content'],
+    type: map['type'],
+    timestamp: DateTime.parse(map['timestamp']),
+    isRead: map['isRead'] ?? false,
+  );
 }
 
 class AppState extends ChangeNotifier {
@@ -73,18 +113,20 @@ class AppState extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
 
   // User Profile
-  String userName = "Mamadou Diallo";
-  String userPhone = "+225 07 08 09 10 11";
+  bool isLoggedIn = false;
+  String userName = "";
+  String userPhone = "";
   String walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
-  String avatarInitials = "MD";
+  String avatarInitials = "";
   bool isMerchant = false;
+  String? userPin;
 
   // Balances
-  final Map<String, double> balances = {
-    'XOF': 458500,
-    'USD': 750,
-    'PAPO': 2500,
-    'BTC': 0.015,
+  Map<String, double> balances = {
+    'XOF': 0,
+    'USD': 0,
+    'PAPO': 0,
+    'BTC': 0,
   };
 
   // Lists
@@ -94,13 +136,11 @@ class AppState extends ChangeNotifier {
   
   List<String> activeDevices = [
     "Tecno Camon 20 • Abidjan, CI (Actuel)",
-    "iPhone 15 Pro • Dakar, SN",
-    "MacBook Pro • Abidjan, CI",
   ];
 
   // KYC States
-  String kycStatus = "none"; // 'none', 'pending', 'verified', 'rejected'
-  String? uploadedDocType; // 'CNI' or 'Passport'
+  String kycStatus = "none"; 
+  String? uploadedDocType;
   String? uploadedDocName;
   bool isFaceVerified = false;
 
@@ -112,132 +152,142 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> pairedDevices = [];
 
   AppState() {
-    _initMockData();
     _restoreLocalData();
   }
 
-
   Future<void> _restoreLocalData() async {
+    final profile = await _localStorageService.loadUserProfile();
+    if (profile != null) {
+      userName = profile['name'] ?? "";
+      userPhone = profile['phone'] ?? "";
+      userPin = profile['pin'];
+      walletAddress = profile['walletAddress'] ?? "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
+      avatarInitials = profile['initials'] ?? "";
+      isLoggedIn = profile['isLoggedIn'] ?? false;
+      kycStatus = profile['kycStatus'] ?? "none";
+      isFaceVerified = profile['isFaceVerified'] ?? false;
+    }
+
+    balances = await _localStorageService.loadBalances();
+    if (balances.isEmpty) {
+      balances = {'XOF': 0, 'USD': 0, 'PAPO': 0, 'BTC': 0};
+    }
+
+    final txData = await _localStorageService.loadTransactions();
+    transactions = txData.map((e) => Transaction.fromMap(e)).toList();
+
     pairedDevices = await _localStorageService.loadPairings();
     notifyListeners();
   }
 
-  Future<void> addPairedDevice({required String peerId, required String alias}) async {
-    final exists = pairedDevices.any((d) => d['peerId'] == peerId);
-    if (!exists) {
-      pairedDevices.insert(0, {
-        'peerId': peerId,
-        'alias': alias,
-        'createdAt': DateTime.now().toIso8601String(),
-      });
-      await _localStorageService.savePairings(pairedDevices);
-      addNotification('Appareil appairé', 'Nouveau contact NFC enregistré: $alias', 'success');
-      notifyListeners();
+  Future<void> _persistProfile() async {
+    await _localStorageService.saveUserProfile({
+      'name': userName,
+      'phone': userPhone,
+      'pin': userPin,
+      'walletAddress': walletAddress,
+      'initials': avatarInitials,
+      'isLoggedIn': isLoggedIn,
+      'kycStatus': kycStatus,
+      'isFaceVerified': isFaceVerified,
+    });
+  }
+
+  Future<void> _persistBalances() async {
+    await _localStorageService.saveBalances(balances);
+  }
+
+  Future<void> _persistTransactions() async {
+    final data = transactions.map((tx) => tx.toMap()).toList();
+    await _localStorageService.saveTransactions(data);
+  }
+
+  // --- Auth Actions ---
+
+  Future<bool> register(String name, String phone, String pin) async {
+    userName = name;
+    userPhone = phone;
+    userPin = pin;
+    
+    final phoneHash = phone.hashCode.toRadixString(16).padLeft(8, '0');
+    walletAddress = "0x${phoneHash}6EC7ab88b098defB751B7401B5f6d8976F".toUpperCase();
+    
+    // Generate initials safely
+    if (name.isNotEmpty) {
+      final names = name.trim().split(" ");
+      avatarInitials = names
+          .where((n) => n.isNotEmpty)
+          .map((n) => n[0])
+          .take(2)
+          .join()
+          .toUpperCase();
+    } else {
+      avatarInitials = "??";
     }
+    isLoggedIn = true;
+    
+    // Initial gift
+    balances['PAPO'] = 1000;
+    balances['XOF'] = 5000;
+
+    await _persistProfile();
+    await _persistBalances();
+    
+    addNotification("Bienvenue !", "Merci d'avoir rejoint PAYPOINT. Vous avez reçu 1000 PAPO en bonus.", "success");
+    notifyListeners();
+    return true;
   }
 
-  Future<void> persistOfflineQueueSnapshot() async {
-    final data = offlineQueue
-        .map((tx) => {
-              'id': tx.id,
-              'title': tx.title,
-              'amount': tx.amount,
-              'asset': tx.asset,
-              'type': tx.type,
-              'timestamp': tx.timestamp.toIso8601String(),
-              'status': tx.status,
-              'description': tx.description,
-            })
-        .toList();
-    await _localStorageService.saveOfflineQueueBackup(data);
+  Future<bool> login(String phone, String pin) async {
+    if (userPhone == phone && userPin == pin) {
+      isLoggedIn = true;
+      await _persistProfile();
+      addNotification("Connexion", "Bon retour sur votre compte PAYPOINT.", "security");
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
-  void _initMockData() {
-    // Standard transactions
-    transactions = [
-      Transaction(
-        id: "TX-101",
-        title: "Transfert vers K. Yao",
-        amount: -15000,
-        asset: "XOF",
-        type: "send",
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        status: "completed",
-        description: "Envoi d'argent mobile à Kouassi Yao",
-      ),
-      Transaction(
-        id: "TX-102",
-        title: "Reçu de Papo Airdrop",
-        amount: 500,
-        asset: "PAPO",
-        type: "receive",
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        status: "completed",
-        description: "Récompense de bienvenue PAPO Wallet",
-      ),
-      Transaction(
-        id: "TX-103",
-        title: "Dépôt Cash Sika",
-        amount: 250000,
-        asset: "XOF",
-        type: "receive",
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        status: "completed",
-        description: "Dépôt d'espèces via point marchand agréé",
-      ),
-      Transaction(
-        id: "TX-104",
-        title: "Paiement Supermarché",
-        amount: -24500,
-        asset: "XOF",
-        type: "merchant",
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        status: "completed",
-        description: "Achat de provisions par QR Code",
-      ),
-      Transaction(
-        id: "TX-105",
-        title: "Envoi à Fatou Sy",
-        amount: -50,
-        asset: "USD",
-        type: "send",
-        timestamp: DateTime.now().subtract(const Duration(days: 4)),
-        status: "failed",
-        description: "Transfert transfrontalier USD échoué",
-      ),
-    ];
-
-    // Notifications
-    notifications = [
-      NotificationModel(
-        id: "N-1",
-        title: "Sécurité : Connexion réussie",
-        content: "Une nouvelle connexion a été détectée sur votre compte depuis Tecno Camon 20.",
-        type: "security",
-        timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-      ),
-      NotificationModel(
-        id: "N-2",
-        title: "Dépôt validé",
-        content: "Votre compte a été crédité de 250,000 XOF avec succès.",
-        type: "success",
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        isRead: true,
-      ),
-      NotificationModel(
-        id: "N-3",
-        title: "Paiement Hors Ligne prêt",
-        content: "Votre solde de secours hors ligne est configuré et disponible.",
-        type: "info",
-        timestamp: DateTime.now().subtract(const Duration(days: 5)),
-        isRead: true,
-      ),
-    ];
+  Future<void> logout() async {
+    isLoggedIn = false;
+    await _persistProfile();
+    setScreen("Login");
+    notifyListeners();
   }
 
-  // Theme Action
-  void toggleTheme() {
-    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+  // --- Wallet Actions (CRUD) ---
+
+  // CREATE Transaction is handled by send/receive
+  // READ is via the transactions list
+
+  // UPDATE balance (Top up simulation)
+  void topUp(double amount, String asset) {
+    balances[asset] = (balances[asset] ?? 0) + amount;
+    
+    transactions.insert(0, Transaction(
+      id: "DEP-${DateTime.now().millisecondsSinceEpoch}",
+      title: "Dépôt $asset",
+      amount: amount,
+      asset: asset,
+      type: "receive",
+      timestamp: DateTime.now(),
+      status: "completed",
+      description: "Dépôt manuel pour simulation",
+    ));
+
+    _persistBalances();
+    _persistTransactions();
+    addNotification("Dépôt réussi", "Votre compte a été crédité de $amount $asset.", "success");
+    notifyListeners();
+  }
+
+  // DELETE/Reset Wallet (for testing/real use case)
+  Future<void> resetWallet() async {
+    balances = {'XOF': 0, 'USD': 0, 'PAPO': 0, 'BTC': 0};
+    transactions.clear();
+    await _persistBalances();
+    await _persistTransactions();
     notifyListeners();
   }
 
@@ -248,7 +298,6 @@ class AppState extends ChangeNotifier {
 
     balances[asset] = currentBal - amount;
     
-    // Add to transaction log
     transactions.insert(
       0,
       Transaction(
@@ -262,6 +311,9 @@ class AppState extends ChangeNotifier {
         description: "Transfert immédiat initié depuis l'application",
       ),
     );
+
+    _persistBalances();
+    _persistTransactions();
 
     addNotification(
       "Transfert réussi",
@@ -291,6 +343,9 @@ class AppState extends ChangeNotifier {
         description: "Fonds reçus via code QR",
       ),
     );
+
+    _persistBalances();
+    _persistTransactions();
 
     addNotification(
       "Fonds reçus",
@@ -450,5 +505,31 @@ class AppState extends ChangeNotifier {
       "security"
     );
     notifyListeners();
+  }
+
+  void toggleTheme() {
+    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    notifyListeners();
+  }
+
+  Future<void> addPairedDevice({required String peerId, required String alias}) async {
+    final exists = pairedDevices.any((d) => d['peerId'] == peerId);
+    if (!exists) {
+      pairedDevices.insert(0, {
+        'peerId': peerId,
+        'alias': alias,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      await _localStorageService.savePairings(pairedDevices);
+      addNotification('Appareil appairé', 'Nouveau contact NFC enregistré: $alias', 'success');
+      notifyListeners();
+    }
+  }
+
+  Future<void> persistOfflineQueueSnapshot() async {
+    final data = offlineQueue
+        .map((tx) => tx.toMap())
+        .toList();
+    await _localStorageService.saveOfflineQueueBackup(data);
   }
 }
