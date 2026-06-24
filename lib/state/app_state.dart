@@ -85,13 +85,14 @@ class AppState extends ChangeNotifier {
         orElse: () => walletSlots.first,
       );
 
+  /// Active wallet balance (XOF only)
+  double get balance => activeSlot?.balance ?? 0;
+
+  // Compat : les anciens écrans utilisent balances['XOF']
+  Map<String, double> get balances => {'XOF': balance};
+
   /// Active wallet ID e.g. PAPO-ABC123-0
   String get activeWalletId => activeSlot?.walletId ?? '';
-
-  /// Active balances (shortcut)
-  Map<String, double> get balances => activeSlot?.balances ?? {};
-
-  // ── Device catalog ────────────────────────────────────────────────────────
   List<Map<String, dynamic>> deviceCatalog = [];
 
   // ── Cached data ───────────────────────────────────────────────────────────
@@ -223,7 +224,7 @@ class AppState extends ChangeNotifier {
   Future<bool> sendMoney({
     required String recipient,
     required double amount,
-    required String asset,
+    String asset = 'XOF',
     String method = 'standard',
     bool isOffline = false,
   }) async {
@@ -235,7 +236,6 @@ class AppState extends ChangeNotifier {
       slotId: slot.id!,
       recipient: recipient,
       amount: amount,
-      asset: asset,
       method: method,
       isOffline: isOffline,
     );
@@ -244,7 +244,7 @@ class AppState extends ChangeNotifier {
     await _db.addNotification(
       userId: userId,
       title: isOffline ? 'Transaction offline signée' : 'Transfert réussi',
-      content: '${amount.toStringAsFixed(0)} $asset → $recipient (via ${method.toUpperCase()})',
+      content: '${amount.toStringAsFixed(0)} XOF → $recipient (via ${method.toUpperCase()})',
       type: 'success',
     );
     await _refreshData();
@@ -260,14 +260,13 @@ class AppState extends ChangeNotifier {
       userId: userId,
       slotId: slot.id!,
       amount: amount,
-      asset: asset,
       senderLabel: senderLabel,
       method: method,
     );
     await _db.addNotification(
       userId: userId,
       title: 'Fonds reçus',
-      content: '+${amount.toStringAsFixed(0)} $asset reçus sur ${slot.name}',
+      content: '+${amount.toStringAsFixed(0)} XOF reçus sur ${slot.name}',
       type: 'success',
     );
     await _refreshData();
@@ -276,11 +275,11 @@ class AppState extends ChangeNotifier {
   Future<void> topUp(double amount, String asset) async {
     final slot = activeSlot;
     if (slot == null) return;
-    await _db.topUp(userId: userId, slotId: slot.id!, amount: amount, asset: asset);
+    await _db.topUp(userId: userId, slotId: slot.id!, amount: amount);
     await _db.addNotification(
       userId: userId,
       title: 'Dépôt réussi',
-      content: '+${amount.toStringAsFixed(0)} $asset crédités sur ${slot.name}',
+      content: '+${amount.toStringAsFixed(0)} XOF crédités sur ${slot.name}',
       type: 'success',
     );
     await _refreshData();
@@ -448,26 +447,16 @@ class AppState extends ChangeNotifier {
   Future<bool> contributeToCircle(int circleId, int memberId, double amount, String asset) async {
     final slot = activeSlot;
     if (slot == null) return false;
-    final balance = slot.balances[asset] ?? 0;
-    if (balance < amount) return false;
+    if (slot.balance < amount) return false;
 
-    await _db.adjustSlotBalance(slot.id!, asset, -amount);
-    await _db.markMemberPaid(circleId, memberId, amount);
-    await _db.createTransaction(
-      userId: userId,
-      slotId: slot.id!,
-      title: 'Contribution Tontine',
-      amount: -amount,
-      asset: asset,
-      type: 'tontine',
-      description: 'Versement mensuel — cercle de confiance',
-      recipient: 'Tontine',
+    final ok = await _db.sendMoney(
+      userId: userId, slotId: slot.id!, recipient: 'Tontine', amount: amount, method: 'standard',
     );
+    if (!ok) return false;
+    await _db.markMemberPaid(circleId, memberId, amount);
     await _db.addNotification(
-      userId: userId,
-      title: 'Tontine versée',
-      content: 'Versement de ${amount.toStringAsFixed(0)} $asset confirmé.',
-      type: 'success',
+      userId: userId, title: 'Tontine versée',
+      content: 'Versement de ${amount.toStringAsFixed(0)} XOF confirmé.', type: 'success',
     );
     await _refreshData();
     return true;
@@ -489,7 +478,6 @@ class AppState extends ChangeNotifier {
       provider: provider,
       reference: reference,
       amount: amount,
-      asset: asset,
     );
     if (ok) await _refreshData();
     return ok;

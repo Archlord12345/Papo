@@ -12,14 +12,12 @@ const _uuid = Uuid();
 
 String hashPin(String pin) => sha256.convert(utf8.encode(pin)).toString();
 String nowIso() => DateTime.now().toIso8601String();
-
-String _buildWalletId(String blockchainAddr, int slot) =>
-    'PAPO-$blockchainAddr-$slot';
+String _walletId(String addr, int slot) => 'PAPO-$addr-$slot';
 
 class DbService {
   final _db = DatabaseHelper.instance;
 
-  // ─── AUTH ─────────────────────────────────────────────────────────────────
+  // ── AUTH ──────────────────────────────────────────────────────────────────
 
   Future<bool> phoneExists(String phone) async {
     final r = await _db.queryFirst('users', where: 'phone = ?', whereArgs: [phone]);
@@ -31,75 +29,53 @@ class DbService {
     required String phone,
     required String pin,
   }) async {
-    final addrRaw = sha256.convert(utf8.encode(phone)).toString().substring(0, 16).toUpperCase();
+    final addr = sha256.convert(utf8.encode(phone)).toString().substring(0, 16).toUpperCase();
     final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
     final initials = parts.map((p) => p[0].toUpperCase()).take(2).join();
 
     final user = UserModel(
-      name: name,
-      phone: phone,
-      pinHash: hashPin(pin),
-      blockchainAddr: addrRaw,
-      initials: initials,
-      createdAt: nowIso(),
+      name: name, phone: phone, pinHash: hashPin(pin),
+      blockchainAddr: addr, initials: initials, createdAt: nowIso(),
     );
 
     final uid = await _db.insert('users', user.toMap());
-    final created = user.copyWith(id: uid);
 
-    // Create default wallet slot 0 (always active)
-    await _createWalletSlot(
-      userId: uid,
-      slot: 0,
-      blockchainAddr: addrRaw,
-      name: 'Wallet Principal',
-      deviceName: 'Appareil Principal',
-      isActive: true,
-    );
-
-    // Seed session
-    await _db.insert('sessions', {
-      'user_id': uid,
-      'label': 'Appareil Principal',
-      'peer_id': _uuid.v4(),
-      'is_current': 1,
-      'last_seen': nowIso(),
+    // Wallet slot 0 — balance initiale 5000 XOF
+    await _db.insert('wallet_slots', {
+      'user_id': uid, 'slot': 0, 'wallet_id': _walletId(addr, 0),
+      'name': 'Wallet Principal', 'device_name': 'Appareil Principal',
+      'is_active': 1, 'balance': 5000.0, 'created_at': nowIso(),
     });
 
-    // Seed default circle
+    // Session courante
+    await _db.insert('sessions', {
+      'user_id': uid, 'label': 'Appareil Principal',
+      'peer_id': _uuid.v4(), 'is_current': 1, 'last_seen': nowIso(),
+    });
+
+    // Tontine par défaut
     final circleId = await _db.insert('circles', {
-      'user_id': uid,
-      'name': 'Cercle Familial',
-      'description': 'Tontine mensuelle',
-      'target': 500000.0,
-      'collected': 300000.0,
-      'contribution': 100000.0,
-      'turn_month': 'Ce mois',
-      'frequency': 'monthly',
-      'created_at': nowIso(),
+      'user_id': uid, 'name': 'Cercle Familial', 'description': 'Tontine mensuelle',
+      'target': 500000.0, 'collected': 300000.0, 'contribution': 100000.0,
+      'turn_month': 'Ce mois', 'frequency': 'monthly', 'created_at': nowIso(),
     });
     for (final m in [
-      {'name': '$name (Vous)', 'phone': phone, 'wallet_id': _buildWalletId(addrRaw, 0), 'paid': 1, 'paid_date': '2024-05-22'},
-      {'name': 'Fatou Sy', 'phone': '+225 07 00 00 01', 'wallet_id': '', 'paid': 1, 'paid_date': '2024-05-20'},
+      {'name': '$name (Vous)', 'phone': phone, 'wallet_id': _walletId(addr, 0), 'paid': 1, 'paid_date': '2024-05-22'},
+      {'name': 'Fatou Sy',     'phone': '+225 07 00 00 01', 'wallet_id': '', 'paid': 1, 'paid_date': '2024-05-20'},
       {'name': 'Kouassi Yao', 'phone': '+225 07 00 00 02', 'wallet_id': '', 'paid': 1, 'paid_date': '2024-05-19'},
-      {'name': 'Awa Diop', 'phone': '+225 07 00 00 03', 'wallet_id': '', 'paid': 0, 'paid_date': null},
-      {'name': 'Ousmane Koné', 'phone': '+225 07 00 00 04', 'wallet_id': '', 'paid': 0, 'paid_date': null},
+      {'name': 'Awa Diop',    'phone': '+225 07 00 00 03', 'wallet_id': '', 'paid': 0, 'paid_date': null},
+      {'name': 'Ousmane Koné','phone': '+225 07 00 00 04', 'wallet_id': '', 'paid': 0, 'paid_date': null},
     ]) {
       await _db.insert('circle_members', {
-        'circle_id': circleId,
-        'name': m['name'],
-        'phone': m['phone'],
-        'wallet_id': m['wallet_id'],
-        'paid': m['paid'],
-        'paid_date': m['paid_date'],
+        'circle_id': circleId, 'name': m['name'], 'phone': m['phone'],
+        'wallet_id': m['wallet_id'], 'paid': m['paid'], 'paid_date': m['paid_date'],
       });
     }
 
     await _addNotif(uid, 'Bienvenue !',
-        'Merci de rejoindre PAYPOINT. 1 000 PAPO + 5 000 XOF crédités sur votre Wallet Principal.',
-        'success');
+        'Bienvenue sur PAYPOINT. 5 000 XOF crédités sur votre Wallet Principal.', 'success');
 
-    return created;
+    return user.copyWith(id: uid);
   }
 
   Future<UserModel?> loginUser(String phone, String pin) async {
@@ -121,60 +97,18 @@ class DbService {
     await _db.dbUpdate('users', {'pin_hash': hashPin(newPin)}, 'id = ?', [userId]);
   }
 
-  // ─── WALLET SLOTS ─────────────────────────────────────────────────────────
-
-  Future<int> _createWalletSlot({
-    required int userId,
-    required int slot,
-    required String blockchainAddr,
-    required String name,
-    required String deviceName,
-    bool isActive = false,
-  }) async {
-    final walletId = _buildWalletId(blockchainAddr, slot);
-    final slotId = await _db.insert('wallet_slots', {
-      'user_id': userId,
-      'slot': slot,
-      'wallet_id': walletId,
-      'name': name,
-      'device_name': deviceName,
-      'is_active': isActive ? 1 : 0,
-      'created_at': nowIso(),
-    });
-    // Seed balances
-    for (final entry in {'XOF': isActive ? 5000.0 : 0.0, 'USD': 0.0, 'PAPO': isActive ? 1000.0 : 0.0, 'BTC': 0.0}.entries) {
-      await _db.insert('wallet_balances', {
-        'slot_id': slotId,
-        'asset': entry.key,
-        'balance': entry.value,
-      });
-    }
-    return slotId;
-  }
+  // ── WALLET SLOTS ──────────────────────────────────────────────────────────
 
   Future<List<WalletSlotModel>> getWalletSlots(int userId) async {
     final rows = await _db.query('wallet_slots',
         where: 'user_id = ?', whereArgs: [userId], orderBy: 'slot ASC');
-    final slots = <WalletSlotModel>[];
-    for (final r in rows) {
-      final slot = WalletSlotModel.fromMap(r);
-      final balRows = await _db.query('wallet_balances',
-          where: 'slot_id = ?', whereArgs: [slot.id]);
-      slot.balances = {for (final b in balRows) b['asset'] as String: (b['balance'] as num).toDouble()};
-      slots.add(slot);
-    }
-    return slots;
+    return rows.map(WalletSlotModel.fromMap).toList();
   }
 
   Future<WalletSlotModel?> getActiveSlot(int userId) async {
     final r = await _db.queryFirst('wallet_slots',
         where: 'user_id = ? AND is_active = 1', whereArgs: [userId]);
-    if (r == null) return null;
-    final slot = WalletSlotModel.fromMap(r);
-    final balRows = await _db.query('wallet_balances',
-        where: 'slot_id = ?', whereArgs: [slot.id]);
-    slot.balances = {for (final b in balRows) b['asset'] as String: (b['balance'] as num).toDouble()};
-    return slot;
+    return r == null ? null : WalletSlotModel.fromMap(r);
   }
 
   Future<void> setActiveSlot(int userId, int slotId) async {
@@ -188,24 +122,21 @@ class DbService {
     required String name,
     required String deviceName,
   }) async {
-    // Find next available slot
-    final existing = await _db.query('wallet_slots',
-        where: 'user_id = ?', whereArgs: [userId]);
+    final existing = await _db.query('wallet_slots', where: 'user_id = ?', whereArgs: [userId]);
     final usedSlots = existing.map((r) => r['slot'] as int).toSet();
     int? nextSlot;
     for (int i = 0; i <= 9; i++) {
       if (!usedSlots.contains(i)) { nextSlot = i; break; }
     }
-    if (nextSlot == null) return null; // max 10 slots
+    if (nextSlot == null) return null;
 
-    final slotId = await _createWalletSlot(
-      userId: userId,
-      slot: nextSlot,
-      blockchainAddr: blockchainAddr,
-      name: name,
-      deviceName: deviceName,
-    );
-    return (await getWalletSlots(userId)).firstWhere((s) => s.id == slotId);
+    final id = await _db.insert('wallet_slots', {
+      'user_id': userId, 'slot': nextSlot, 'wallet_id': _walletId(blockchainAddr, nextSlot),
+      'name': name, 'device_name': deviceName, 'is_active': 0,
+      'balance': 0.0, 'created_at': nowIso(),
+    });
+    final r = await _db.queryFirst('wallet_slots', where: 'id = ?', whereArgs: [id]);
+    return r == null ? null : WalletSlotModel.fromMap(r);
   }
 
   Future<void> updateSlotName(int slotId, String newName) async {
@@ -220,67 +151,103 @@ class DbService {
     return _db.query('devices_catalog', orderBy: 'name ASC');
   }
 
-  // ─── BALANCES ─────────────────────────────────────────────────────────────
+  // ── BALANCE ───────────────────────────────────────────────────────────────
 
-  Future<double> getSlotBalance(int slotId, String asset) async {
-    final r = await _db.queryFirst('wallet_balances',
-        where: 'slot_id = ? AND asset = ?', whereArgs: [slotId, asset]);
+  Future<double> getBalance(int slotId) async {
+    final r = await _db.queryFirst('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
     return r == null ? 0.0 : (r['balance'] as num).toDouble();
   }
 
-  Future<void> setSlotBalance(int slotId, String asset, double value) async {
-    await _db.rawExecute(
-      'INSERT INTO wallet_balances (slot_id, asset, balance) VALUES (?, ?, ?) '
-      'ON CONFLICT(slot_id, asset) DO UPDATE SET balance = excluded.balance',
-      [slotId, asset, value],
-    );
+  Future<void> _setBalance(int slotId, double value) async {
+    await _db.dbUpdate('wallet_slots', {'balance': value}, 'id = ?', [slotId]);
   }
 
-  Future<void> adjustSlotBalance(int slotId, String asset, double delta) async {
-    final current = await getSlotBalance(slotId, asset);
-    await setSlotBalance(slotId, asset, current + delta);
-  }
+  // ── TRANSACTIONS ──────────────────────────────────────────────────────────
 
-  // ─── TRANSACTIONS ─────────────────────────────────────────────────────────
-
-  Future<TransactionModel> createTransaction({
-    required int userId,
-    required int slotId,
-    required String title,
-    required double amount,
-    required String asset,
-    required String type,
-    String status = 'completed',
-    String description = '',
-    String recipient = '',
-    String method = 'standard',
-    bool isOffline = false,
+  Future<TransactionModel> _createTx({
+    required int userId, required int slotId, required String title,
+    required double amount, required String type,
+    String status = 'completed', String description = '',
+    String recipient = '', String method = 'standard', bool isOffline = false,
   }) async {
     final tx = TransactionModel(
-      id: _uuid.v4(),
-      userId: userId,
-      slotId: slotId,
-      title: title,
-      amount: amount,
-      asset: asset,
-      type: type,
-      status: status,
-      description: description,
-      recipient: recipient,
-      method: method,
-      isOffline: isOffline,
-      createdAt: nowIso(),
+      id: _uuid.v4(), userId: userId, slotId: slotId, title: title,
+      amount: amount, asset: 'XOF', type: type, status: status,
+      description: description, recipient: recipient,
+      method: method, isOffline: isOffline, createdAt: nowIso(),
     );
     await _db.insert('transactions', tx.toMap());
     return tx;
+  }
+
+  /// Atomic transfer: debit balance + record transaction.
+  Future<bool> sendMoney({
+    required int userId, required int slotId, required String recipient,
+    required double amount, String method = 'standard', bool isOffline = false,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    bool success = false;
+    await db.transaction((txn) async {
+      final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
+      if (rows.isEmpty) return;
+      final balance = (rows.first['balance'] as num).toDouble();
+      if (balance < amount) return;
+      await txn.update('wallet_slots', {'balance': balance - amount}, where: 'id = ?', whereArgs: [slotId]);
+      await txn.insert('transactions', {
+        'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
+        'title': 'Transfert vers $recipient', 'amount': -amount, 'type': isOffline ? 'offline' : 'send',
+        'status': isOffline ? 'pending' : 'completed',
+        'description': isOffline ? 'Signé localement (${method.toUpperCase()})' : 'via ${method.toUpperCase()}',
+        'recipient': recipient, 'method': method, 'is_offline': isOffline ? 1 : 0,
+        'created_at': nowIso(),
+      });
+      success = true;
+    });
+    return success;
+  }
+
+  Future<void> receiveMoney({
+    required int userId, required int slotId, required double amount,
+    String senderLabel = 'Fonds reçus', String method = 'standard',
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
+      if (rows.isEmpty) return;
+      final balance = (rows.first['balance'] as num).toDouble();
+      await txn.update('wallet_slots', {'balance': balance + amount}, where: 'id = ?', whereArgs: [slotId]);
+      await txn.insert('transactions', {
+        'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
+        'title': senderLabel, 'amount': amount, 'type': 'receive',
+        'status': 'completed', 'description': 'Reçu via ${method.toUpperCase()}',
+        'recipient': '', 'method': method, 'is_offline': 0,
+        'created_at': nowIso(),
+      });
+    });
+  }
+
+  Future<void> topUp({required int userId, required int slotId, required double amount}) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
+      if (rows.isEmpty) return;
+      final balance = (rows.first['balance'] as num).toDouble();
+      await txn.update('wallet_slots', {'balance': balance + amount}, where: 'id = ?', whereArgs: [slotId]);
+      await txn.insert('transactions', {
+        'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
+        'title': 'Dépôt XOF', 'amount': amount, 'type': 'deposit',
+        'status': 'completed', 'description': 'Dépôt manuel',
+        'recipient': '', 'method': 'standard', 'is_offline': 0,
+        'created_at': nowIso(),
+      });
+    });
   }
 
   Future<List<TransactionModel>> getTransactions(int userId, {int? slotId, int? limit}) async {
     String where = 'user_id = ?';
     List whereArgs = [userId];
     if (slotId != null) { where += ' AND slot_id = ?'; whereArgs.add(slotId); }
-    final rows = await _db.query('transactions',
-        where: where, whereArgs: whereArgs,
+    final rows = await _db.query('transactions', where: where, whereArgs: whereArgs,
         orderBy: 'created_at DESC', limit: limit);
     return rows.map(TransactionModel.fromMap).toList();
   }
@@ -288,100 +255,22 @@ class DbService {
   Future<List<TransactionModel>> getOfflineQueue(int userId) async {
     final rows = await _db.query('transactions',
         where: 'user_id = ? AND is_offline = 1 AND status = ?',
-        whereArgs: [userId, 'pending'],
-        orderBy: 'created_at DESC');
+        whereArgs: [userId, 'pending'], orderBy: 'created_at DESC');
     return rows.map(TransactionModel.fromMap).toList();
   }
 
   Future<void> syncOfflineTransactions(int userId) async {
     await _db.rawExecute(
-      'UPDATE transactions SET status = ?, is_offline = 0 '
-      'WHERE user_id = ? AND is_offline = 1 AND status = ?',
-      ['completed', userId, 'pending'],
-    );
+        'UPDATE transactions SET status = ?, is_offline = 0 WHERE user_id = ? AND is_offline = 1 AND status = ?',
+        ['completed', userId, 'pending']);
   }
 
-  /// Full transfer: debit active slot, record tx. Returns false if insufficient funds.
-  Future<bool> sendMoney({
-    required int userId,
-    required int slotId,
-    required String recipient,
-    required double amount,
-    required String asset,
-    String method = 'standard',
-    bool isOffline = false,
-  }) async {
-    final balance = await getSlotBalance(slotId, asset);
-    if (balance < amount) return false;
-    await adjustSlotBalance(slotId, asset, -amount);
-    await createTransaction(
-      userId: userId,
-      slotId: slotId,
-      title: 'Transfert vers $recipient',
-      amount: -amount,
-      asset: asset,
-      type: isOffline ? 'offline' : 'send',
-      status: isOffline ? 'pending' : 'completed',
-      description: isOffline
-          ? 'Signé localement (${method.toUpperCase()})'
-          : 'Transfert via ${method.toUpperCase()}',
-      recipient: recipient,
-      method: method,
-      isOffline: isOffline,
-    );
-    return true;
-  }
-
-  Future<void> receiveMoney({
-    required int userId,
-    required int slotId,
-    required double amount,
-    required String asset,
-    String senderLabel = 'Fonds reçus',
-    String method = 'standard',
-  }) async {
-    await adjustSlotBalance(slotId, asset, amount);
-    await createTransaction(
-      userId: userId,
-      slotId: slotId,
-      title: senderLabel,
-      amount: amount,
-      asset: asset,
-      type: 'receive',
-      description: 'Reçu via ${method.toUpperCase()}',
-      method: method,
-    );
-  }
-
-  Future<void> topUp({
-    required int userId,
-    required int slotId,
-    required double amount,
-    required String asset,
-  }) async {
-    await adjustSlotBalance(slotId, asset, amount);
-    await createTransaction(
-      userId: userId,
-      slotId: slotId,
-      title: 'Dépôt $asset',
-      amount: amount,
-      asset: asset,
-      type: 'deposit',
-      description: 'Dépôt manuel',
-    );
-  }
-
-  // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+  // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
 
   Future<void> _addNotif(int userId, String title, String content, String type) async {
     await _db.insert('notifications', {
-      'id': _uuid.v4(),
-      'user_id': userId,
-      'title': title,
-      'content': content,
-      'type': type,
-      'is_read': 0,
-      'created_at': nowIso(),
+      'id': _uuid.v4(), 'user_id': userId, 'title': title,
+      'content': content, 'type': type, 'is_read': 0, 'created_at': nowIso(),
     });
   }
 
@@ -389,8 +278,7 @@ class DbService {
       _addNotif(userId, title, content, type);
 
   Future<List<NotificationModel>> getNotifications(int userId) async {
-    final rows = await _db.query('notifications',
-        where: 'user_id = ?', whereArgs: [userId],
+    final rows = await _db.query('notifications', where: 'user_id = ?', whereArgs: [userId],
         orderBy: 'created_at DESC', limit: 100);
     return rows.map(NotificationModel.fromMap).toList();
   }
@@ -403,11 +291,10 @@ class DbService {
     await _db.dbUpdate('notifications', {'is_read': 1}, 'user_id = ?', [userId]);
   }
 
-  // ─── SESSIONS ─────────────────────────────────────────────────────────────
+  // ── SESSIONS ──────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getSessions(int userId) async {
-    return _db.query('sessions',
-        where: 'user_id = ?', whereArgs: [userId], orderBy: 'last_seen DESC');
+    return _db.query('sessions', where: 'user_id = ?', whereArgs: [userId], orderBy: 'last_seen DESC');
   }
 
   Future<void> addSession(int userId, String peerId, String label) async {
@@ -415,11 +302,7 @@ class DbService {
         where: 'user_id = ? AND peer_id = ?', whereArgs: [userId, peerId]);
     if (exists == null) {
       await _db.insert('sessions', {
-        'user_id': userId,
-        'label': label,
-        'peer_id': peerId,
-        'is_current': 0,
-        'last_seen': nowIso(),
+        'user_id': userId, 'label': label, 'peer_id': peerId, 'is_current': 0, 'last_seen': nowIso(),
       });
     }
   }
@@ -428,127 +311,90 @@ class DbService {
     await _db.dbDelete('sessions', 'id = ?', [sessionId]);
   }
 
-  // ─── CIRCLE (TONTINE) ─────────────────────────────────────────────────────
+  // ── CIRCLES ───────────────────────────────────────────────────────────────
 
   Future<List<CircleModel>> getCircles(int userId) async {
     final rows = await _db.query('circles', where: 'user_id = ?', whereArgs: [userId]);
     final result = <CircleModel>[];
     for (final r in rows) {
-      final circle = CircleModel.fromMap(r);
-      final memberRows = await _db.query('circle_members',
-          where: 'circle_id = ?', whereArgs: [circle.id]);
-      circle.members = memberRows.map(CircleMember.fromMap).toList();
-      result.add(circle);
+      final c = CircleModel.fromMap(r);
+      final mRows = await _db.query('circle_members', where: 'circle_id = ?', whereArgs: [c.id]);
+      c.members = mRows.map(CircleMember.fromMap).toList();
+      result.add(c);
     }
     return result;
   }
 
   Future<CircleModel> createCircle({
-    required int userId,
-    required String name,
-    String description = '',
-    required double target,
-    required double contribution,
-    String frequency = 'monthly',
+    required int userId, required String name, String description = '',
+    required double target, required double contribution, String frequency = 'monthly',
   }) async {
     final id = await _db.insert('circles', {
-      'user_id': userId,
-      'name': name,
-      'description': description,
-      'target': target,
-      'collected': 0.0,
-      'contribution': contribution,
-      'turn_month': '',
-      'frequency': frequency,
-      'created_at': nowIso(),
+      'user_id': userId, 'name': name, 'description': description,
+      'target': target, 'collected': 0.0, 'contribution': contribution,
+      'turn_month': '', 'frequency': frequency, 'created_at': nowIso(),
     });
-    return CircleModel(
-      id: id,
-      userId: userId,
-      name: name,
-      description: description,
-      target: target,
-      contribution: contribution,
-      frequency: frequency,
-      createdAt: nowIso(),
-    );
+    return CircleModel(id: id, userId: userId, name: name, description: description,
+        target: target, contribution: contribution, frequency: frequency, createdAt: nowIso());
   }
 
-  Future<void> updateCircle(CircleModel circle) async {
-    await _db.dbUpdate('circles', circle.toMap(), 'id = ?', [circle.id]);
+  Future<void> updateCircle(CircleModel c) async {
+    await _db.dbUpdate('circles', c.toMap(), 'id = ?', [c.id]);
   }
 
-  Future<void> deleteCircle(int circleId) async {
-    await _db.dbDelete('circles', 'id = ?', [circleId]);
+  Future<void> deleteCircle(int id) async {
+    await _db.dbDelete('circles', 'id = ?', [id]);
   }
 
   Future<CircleMember> addCircleMember({
-    required int circleId,
-    required String name,
-    required String phone,
-    String walletId = '',
+    required int circleId, required String name, required String phone, String walletId = '',
   }) async {
     final id = await _db.insert('circle_members', {
-      'circle_id': circleId,
-      'name': name,
-      'phone': phone,
-      'wallet_id': walletId,
-      'paid': 0,
+      'circle_id': circleId, 'name': name, 'phone': phone, 'wallet_id': walletId, 'paid': 0,
     });
-    return CircleMember(
-        id: id, circleId: circleId, name: name, phone: phone, walletId: walletId);
+    return CircleMember(id: id, circleId: circleId, name: name, phone: phone, walletId: walletId);
   }
 
-  Future<void> removeCircleMember(int memberId) async {
-    await _db.dbDelete('circle_members', 'id = ?', [memberId]);
+  Future<void> removeCircleMember(int id) async {
+    await _db.dbDelete('circle_members', 'id = ?', [id]);
   }
 
   Future<void> markMemberPaid(int circleId, int memberId, double contribution) async {
     final now = DateTime.now().toIso8601String().substring(0, 10);
-    await _db.dbUpdate('circle_members',
-        {'paid': 1, 'paid_date': now}, 'id = ?', [memberId]);
-    await _db.rawExecute(
-        'UPDATE circles SET collected = collected + ? WHERE id = ?',
-        [contribution, circleId]);
+    await _db.dbUpdate('circle_members', {'paid': 1, 'paid_date': now}, 'id = ?', [memberId]);
+    await _db.rawExecute('UPDATE circles SET collected = collected + ? WHERE id = ?', [contribution, circleId]);
   }
 
-  // ─── BILLS ────────────────────────────────────────────────────────────────
+  // ── BILLS ─────────────────────────────────────────────────────────────────
 
   Future<bool> payBill({
-    required int userId,
-    required int slotId,
-    required String provider,
-    required String reference,
-    required double amount,
-    String asset = 'XOF',
+    required int userId, required int slotId, required String provider,
+    required String reference, required double amount,
   }) async {
-    final balance = await getSlotBalance(slotId, asset);
-    if (balance < amount) return false;
-
-    await adjustSlotBalance(slotId, asset, -amount);
-    await _db.insert('bill_payments', {
-      'id': _uuid.v4(),
-      'user_id': userId,
-      'provider': provider,
-      'reference': reference,
-      'amount': amount,
-      'asset': asset,
-      'status': 'completed',
-      'created_at': nowIso(),
+    final db = await DatabaseHelper.instance.database;
+    bool success = false;
+    await db.transaction((txn) async {
+      final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
+      if (rows.isEmpty) return;
+      final balance = (rows.first['balance'] as num).toDouble();
+      if (balance < amount) return;
+      await txn.update('wallet_slots', {'balance': balance - amount}, where: 'id = ?', whereArgs: [slotId]);
+      await txn.insert('bill_payments', {
+        'id': _uuid.v4(), 'user_id': userId, 'provider': provider,
+        'reference': reference, 'amount': amount, 'status': 'completed', 'created_at': nowIso(),
+      });
+      await txn.insert('transactions', {
+        'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
+        'title': 'Facture $provider', 'amount': -amount, 'type': 'bill',
+        'status': 'completed', 'description': '$provider — Réf: $reference',
+        'recipient': provider, 'method': 'standard', 'is_offline': 0, 'created_at': nowIso(),
+      });
+      success = true;
     });
-    await createTransaction(
-      userId: userId,
-      slotId: slotId,
-      title: 'Facture $provider',
-      amount: -amount,
-      asset: asset,
-      type: 'bill',
-      description: '$provider — Réf: $reference',
-      recipient: provider,
-    );
-    await _addNotif(userId, 'Facture payée',
-        'Paiement de ${amount.toStringAsFixed(0)} $asset pour $provider confirmé.',
-        'success');
-    return true;
+    if (success) {
+      await _addNotif(userId, 'Facture payée',
+          'Paiement de ${amount.toStringAsFixed(0)} XOF pour $provider confirmé.', 'success');
+    }
+    return success;
   }
 }

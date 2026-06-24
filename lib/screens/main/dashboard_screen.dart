@@ -23,7 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final appState = context.watch<AppState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final slot = appState.activeSlot;
-    final xofBalance = slot?.xofBalance ?? 0;
+    final xofBalance = slot?.balance ?? 0;
 
     return Scaffold(
       appBar: AppBar(

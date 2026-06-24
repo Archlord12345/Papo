@@ -14,7 +14,7 @@ class DatabaseHelper {
 
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'papo_wallet_v3.db');
+    final path = join(dbPath, 'papo_wallet_v4.db');
     return openDatabase(path, version: 1, onCreate: _onCreate);
   }
 
@@ -41,8 +41,8 @@ class DatabaseHelper {
       )
     ''');
 
-    // ── WALLET SLOTS (0-9 per user) ────────────────────────────────────────
-    // name = user-chosen label, device_name = physical device name from devices_catalog
+    // ── WALLET SLOTS ──────────────────────────────────────────────────────────
+    // Un wallet = un seul solde XOF + un appareil physique.
     await db.execute('''
       CREATE TABLE wallet_slots (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,34 +52,21 @@ class DatabaseHelper {
         name        TEXT    NOT NULL DEFAULT 'Wallet',
         device_name TEXT    NOT NULL DEFAULT 'Inconnu',
         is_active   INTEGER NOT NULL DEFAULT 0,
+        balance     REAL    NOT NULL DEFAULT 0,
         created_at  TEXT    NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         UNIQUE(user_id, slot)
       )
     ''');
 
-    // ── WALLET BALANCES (per slot per asset) ──────────────────────────────
-    await db.execute('''
-      CREATE TABLE wallet_balances (
-        id        INTEGER PRIMARY KEY AUTOINCREMENT,
-        slot_id   INTEGER NOT NULL,
-        asset     TEXT    NOT NULL,
-        balance   REAL    NOT NULL DEFAULT 0,
-        FOREIGN KEY (slot_id) REFERENCES wallet_slots(id) ON DELETE CASCADE,
-        UNIQUE(slot_id, asset)
-      )
-    ''');
-
-    // ── DEVICE CATALOG (global list of device types) ──────────────────────
+    // ── DEVICE CATALOG ────────────────────────────────────────────────────────
     await db.execute('''
       CREATE TABLE devices_catalog (
         id   INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT    NOT NULL UNIQUE,
-        icon TEXT    NOT NULL DEFAULT 'smartphone'
+        name TEXT NOT NULL UNIQUE,
+        icon TEXT NOT NULL DEFAULT 'smartphone'
       )
     ''');
-
-    // Seed device catalog
     for (final d in _deviceCatalog) {
       await db.insert('devices_catalog', d);
     }
@@ -92,7 +79,6 @@ class DatabaseHelper {
         slot_id     INTEGER NOT NULL,
         title       TEXT    NOT NULL,
         amount      REAL    NOT NULL,
-        asset       TEXT    NOT NULL,
         type        TEXT    NOT NULL,
         status      TEXT    NOT NULL DEFAULT 'completed',
         description TEXT    NOT NULL DEFAULT '',
@@ -118,7 +104,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // ── SESSIONS (connected devices) ──────────────────────────────────────────
+    // ── SESSIONS ──────────────────────────────────────────────────────────────
     await db.execute('''
       CREATE TABLE sessions (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,19 +117,19 @@ class DatabaseHelper {
       )
     ''');
 
-    // ── TONTINE CIRCLES ────────────────────────────────────────────────────────
+    // ── TONTINE CIRCLES ───────────────────────────────────────────────────────
     await db.execute('''
       CREATE TABLE circles (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id         INTEGER NOT NULL,
-        name            TEXT    NOT NULL,
-        description     TEXT    NOT NULL DEFAULT '',
-        target          REAL    NOT NULL,
-        collected       REAL    NOT NULL DEFAULT 0,
-        contribution    REAL    NOT NULL DEFAULT 100000,
-        turn_month      TEXT    NOT NULL DEFAULT '',
-        frequency       TEXT    NOT NULL DEFAULT 'monthly',
-        created_at      TEXT    NOT NULL,
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        name         TEXT    NOT NULL,
+        description  TEXT    NOT NULL DEFAULT '',
+        target       REAL    NOT NULL,
+        collected    REAL    NOT NULL DEFAULT 0,
+        contribution REAL    NOT NULL DEFAULT 100000,
+        turn_month   TEXT    NOT NULL DEFAULT '',
+        frequency    TEXT    NOT NULL DEFAULT 'monthly',
+        created_at   TEXT    NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     ''');
@@ -169,9 +155,20 @@ class DatabaseHelper {
         provider   TEXT    NOT NULL,
         reference  TEXT    NOT NULL,
         amount     REAL    NOT NULL,
-        asset      TEXT    NOT NULL DEFAULT 'XOF',
         status     TEXT    NOT NULL DEFAULT 'completed',
         created_at TEXT    NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // ── OTP CODES (local, ephemeral) ──────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE otp_codes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        code       TEXT    NOT NULL,
+        expires_at TEXT    NOT NULL,
+        used       INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     ''');
@@ -195,16 +192,11 @@ class DatabaseHelper {
     {'name': 'Tablette Android', 'icon': 'tablet'},
   ];
 
-  // ─── Generic helpers ──────────────────────────────────────────────────────
+  // ── Generic helpers ───────────────────────────────────────────────────────
 
   Future<int> insert(String table, Map<String, dynamic> row) async {
     final db = await database;
     return db.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<int> rawInsert(String sql, [List<dynamic>? args]) async {
-    final db = await database;
-    return db.rawInsert(sql, args);
   }
 
   Future<int> dbUpdate(String table, Map<String, dynamic> row,
@@ -227,16 +219,13 @@ class DatabaseHelper {
   }) async {
     final db = await database;
     return db.query(table,
-        where: where,
-        whereArgs: whereArgs,
-        orderBy: orderBy,
-        limit: limit);
+        where: where, whereArgs: whereArgs,
+        orderBy: orderBy, limit: limit);
   }
 
   Future<Map<String, dynamic>?> queryFirst(String table,
       {String? where, List<dynamic>? whereArgs}) async {
-    final rows =
-        await query(table, where: where, whereArgs: whereArgs, limit: 1);
+    final rows = await query(table, where: where, whereArgs: whereArgs, limit: 1);
     return rows.isEmpty ? null : rows.first;
   }
 
@@ -249,5 +238,11 @@ class DatabaseHelper {
       [List<dynamic>? args]) async {
     final db = await database;
     return db.rawQuery(sql, args);
+  }
+
+  /// Execute multiple operations atomically.
+  Future<T> transaction<T>(Future<T> Function(Transaction txn) action) async {
+    final db = await database;
+    return db.transaction(action);
   }
 }

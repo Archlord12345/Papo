@@ -4,12 +4,12 @@ class TransactionModel {
   final int slotId;
   final String title;
   final double amount;
-  final String asset;
-  final String type;       // send | receive | offline | bill | deposit | tontine
-  String status;           // completed | pending | failed
+  final String asset; // toujours 'XOF'
+  final String type;  // send | receive | offline | bill | deposit | tontine
+  String status;      // completed | pending | failed
   final String description;
   final String recipient;
-  final String method;     // standard | qr | nfc | bluetooth | offline
+  final String method; // standard | qr | nfc | bluetooth | offline
   final bool isOffline;
   final String createdAt;
 
@@ -19,7 +19,7 @@ class TransactionModel {
     required this.slotId,
     required this.title,
     required this.amount,
-    required this.asset,
+    this.asset = 'XOF',
     required this.type,
     this.status = 'completed',
     this.description = '',
@@ -35,7 +35,6 @@ class TransactionModel {
     'slot_id': slotId,
     'title': title,
     'amount': amount,
-    'asset': asset,
     'type': type,
     'status': status,
     'description': description,
@@ -51,7 +50,7 @@ class TransactionModel {
     slotId: m['slot_id'] as int? ?? 0,
     title: m['title'] as String,
     amount: (m['amount'] as num).toDouble(),
-    asset: m['asset'] as String,
+    asset: 'XOF',
     type: m['type'] as String,
     status: m['status'] as String? ?? 'completed',
     description: m['description'] as String? ?? '',

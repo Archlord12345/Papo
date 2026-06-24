@@ -1,15 +1,15 @@
-/// Represents one of the 10 wallet slots (0-9) a user can own.
-/// Wallet ID format: PAPO-{BLOCKCHAIN_ADDR}-{SLOT}
+/// Un wallet PAPO = un seul solde XOF + un appareil physique dédié.
+/// Format ID : PAPO-{BLOCKCHAIN_ADDR}-{SLOT}  (slot 0-9)
 class WalletSlotModel {
   final int? id;
   final int userId;
-  final int slot;          // 0-9
+  final int slot;          // 0..9
   final String walletId;   // PAPO-{addr}-{slot}
-  final String name;       // user-chosen label
-  final String deviceName; // from devices_catalog
+  String name;             // label choisi par l'utilisateur
+  final String deviceName; // appareil physique associé (devices_catalog)
   bool isActive;
   final String createdAt;
-  Map<String, double> balances; // asset -> amount
+  double balance;          // UNIQUE balance XOF
 
   WalletSlotModel({
     this.id,
@@ -20,7 +20,7 @@ class WalletSlotModel {
     required this.deviceName,
     this.isActive = false,
     required this.createdAt,
-    this.balances = const {},
+    this.balance = 0,
   });
 
   Map<String, dynamic> toMap() => {
@@ -31,6 +31,7 @@ class WalletSlotModel {
     'name': name,
     'device_name': deviceName,
     'is_active': isActive ? 1 : 0,
+    'balance': balance,
     'created_at': createdAt,
   };
 
@@ -43,17 +44,15 @@ class WalletSlotModel {
     deviceName: m['device_name'] as String? ?? 'Inconnu',
     isActive: (m['is_active'] as int? ?? 0) == 1,
     createdAt: m['created_at'] as String,
+    balance: (m['balance'] as num?)?.toDouble() ?? 0.0,
   );
-
-  double get xofBalance => balances['XOF'] ?? 0;
-  double totalBalance(String asset) => balances[asset] ?? 0;
 
   WalletSlotModel copyWith({
     int? id,
     String? name,
     String? deviceName,
     bool? isActive,
-    Map<String, double>? balances,
+    double? balance,
   }) =>
     WalletSlotModel(
       id: id ?? this.id,
@@ -64,6 +63,6 @@ class WalletSlotModel {
       deviceName: deviceName ?? this.deviceName,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
-      balances: balances ?? this.balances,
+      balance: balance ?? this.balance,
     );
 }
