@@ -15,7 +15,13 @@ class DatabaseHelper {
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'papo_wallet_v4.db');
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE wallet_slots ADD COLUMN asset TEXT NOT NULL DEFAULT "XOF"');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -42,7 +48,7 @@ class DatabaseHelper {
     ''');
 
     // ── WALLET SLOTS ──────────────────────────────────────────────────────────
-    // Un wallet = un seul solde XOF + un appareil physique.
+    // Un wallet = un seul solde + une devise + un appareil physique.
     await db.execute('''
       CREATE TABLE wallet_slots (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +57,7 @@ class DatabaseHelper {
         wallet_id   TEXT    NOT NULL UNIQUE,
         name        TEXT    NOT NULL DEFAULT 'Wallet',
         device_name TEXT    NOT NULL DEFAULT 'Inconnu',
+        asset       TEXT    NOT NULL DEFAULT 'XOF',
         is_active   INTEGER NOT NULL DEFAULT 0,
         balance     REAL    NOT NULL DEFAULT 0,
         created_at  TEXT    NOT NULL,

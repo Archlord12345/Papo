@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_input.dart';
+import '../../widgets/qr_scanner_widget.dart';
 import '../../models/circle_model.dart';
 import '../../utils/formatters.dart';
 
@@ -466,23 +467,32 @@ class _QrScanMemberSheetState extends State<_QrScanMemberSheet> with SingleTicke
           const Text('Demandez au nouveau membre d\'afficher son QR depuis son profil PAYPOINT.', style: TextStyle(color: Colors.grey, height: 1.5)),
           const SizedBox(height: 24),
           if (!_scanned) ...[
-            Center(child: Stack(alignment: Alignment.center, children: [
-              Container(width: 220, height: 220, decoration: BoxDecoration(border: Border.all(color: AppColors.primary, width: 3), borderRadius: BorderRadius.circular(14))),
-              AnimatedBuilder(animation: _scan, builder: (_, __) => Positioned(
-                top: 10 + _scan.value * 190,
-                child: Container(width: 214, height: 2, color: AppColors.primary.withValues(alpha: 0.7)),
-              )),
-              const Icon(LucideIcons.qrCode, size: 80, color: Colors.grey),
-            ])),
-            const SizedBox(height: 24),
-            CustomButton(
-              text: 'Simuler le scan',
-              onPressed: () => setState(() {
-                _scannedName = 'Nouveau Membre';
-                _scannedPhone = '+225 07 99 88 77';
-                _scannedWalletId = 'PAPO-${widget.appState.blockchainAddr}-0';
-                _scanned = true;
-              }),
+            SizedBox(
+              height: 300,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: QrScannerWidget(
+                  onDetect: (data) {
+                    // Expecting format like "papo:user/Name/Phone/WalletId" or similar
+                    // For now, let's assume it's a JSON or a simple formatted string
+                    // If it's just a wallet ID, we'd need to fetch user info.
+                    // Let's assume the QR contains "name|phone|walletId" for this demo/simulation replacement
+                    final parts = data.split('|');
+                    setState(() {
+                      if (parts.length >= 3) {
+                        _scannedName = parts[0];
+                        _scannedPhone = parts[1];
+                        _scannedWalletId = parts[2];
+                      } else {
+                        _scannedName = 'Utilisateur QR';
+                        _scannedPhone = '';
+                        _scannedWalletId = data;
+                      }
+                      _scanned = true;
+                    });
+                  },
+                ),
+              ),
             ),
           ] else ...[
             Container(

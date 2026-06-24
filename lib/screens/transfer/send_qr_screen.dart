@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_input.dart';
+import '../../widgets/qr_scanner_widget.dart';
 import '../../utils/formatters.dart';
 
 /// QR transfer: sender scans recipient's QR, then enters amount.
@@ -19,8 +20,8 @@ class SendQrScreen extends StatefulWidget {
 
 class _SendQrScreenState extends State<SendQrScreen>
     with SingleTickerProviderStateMixin {
-  // mode: 'choose' | 'scan' | 'amount' | 'confirm' | 'success' | 'fail'
-  String _mode = 'choose';
+  // mode: 'scan' | 'amount' | 'confirm' | 'success' | 'fail'
+  String _mode = 'scan';
   String _scannedRecipient = '';
   final _amountCtrl = TextEditingController();
   String _asset = 'XOF';
@@ -34,6 +35,14 @@ class _SendQrScreenState extends State<SendQrScreen>
     _scanAnim = AnimationController(
         vsync: this, duration: const Duration(seconds: 2))
       ..repeat();
+
+    // Initialiser l'actif sur celui du wallet actuel
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = context.read<AppState>();
+      if (appState.activeSlot != null) {
+        setState(() => _asset = appState.activeSlot!.asset);
+      }
+    });
   }
 
   @override
@@ -55,10 +64,16 @@ class _SendQrScreenState extends State<SendQrScreen>
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowLeft),
           onPressed: () {
-            if (_mode == 'choose') {
+            if (_mode == 'scan') {
               appState.popScreen();
+            } else if (_mode == 'amount') {
+              setState(() => _mode = 'scan');
+            } else if (_mode == 'confirm') {
+              setState(() => _mode = 'amount');
+            } else if (_mode == 'fail') {
+              setState(() => _mode = 'amount');
             } else {
-              setState(() => _mode = 'choose');
+              appState.popScreen();
             }
           },
         ),
@@ -69,18 +84,16 @@ class _SendQrScreenState extends State<SendQrScreen>
 
   Widget _buildBody(AppState appState) {
     switch (_mode) {
-      case 'choose': return _ChooseView(
-        onSend: () => setState(() => _mode = 'scan'),
-        onReceive: () => setState(() => _mode = 'receive'),
-      );
       case 'scan': return _ScanView(
-        animCtrl: _scanAnim,
-        onSimulate: (addr) => setState(() {
-          _scannedRecipient = addr;
-          _mode = 'amount';
-        }),
+        onScanned: (recipient, amount, asset) {
+          setState(() {
+            _scannedRecipient = recipient;
+            if (amount != null) _amountCtrl.text = amount;
+            if (asset != null) _asset = asset;
+            _mode = 'amount';
+          });
+        },
       );
-      case 'receive': return _ReceiveQrView(walletId: appState.activeWalletId, name: appState.userName);
       case 'amount': return _AmountView(
         recipient: _scannedRecipient,
         amountCtrl: _amountCtrl,
@@ -128,127 +141,39 @@ class _SendQrScreenState extends State<SendQrScreen>
   }
 }
 
-class _ChooseView extends StatelessWidget {
-  final VoidCallback onSend;
-  final VoidCallback onReceive;
-  const _ChooseView({required this.onSend, required this.onReceive});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(LucideIcons.qrCode, size: 80, color: AppColors.primary),
-          const SizedBox(height: 24),
-          const Text('Que souhaitez-vous faire ?',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 48),
-          _BigButton(icon: LucideIcons.scanLine, label: 'Scanner le QR d\'un contact\n(pour envoyer)', color: AppColors.primary, onTap: onSend),
-          const SizedBox(height: 16),
-          _BigButton(icon: LucideIcons.qrCode, label: 'Afficher mon QR\n(pour recevoir)', color: AppColors.secondary, onTap: onReceive),
-        ],
-      ),
-    );
-  }
-}
-
 class _ScanView extends StatelessWidget {
-  final AnimationController animCtrl;
-  final void Function(String) onSimulate;
-  const _ScanView({required this.animCtrl, required this.onSimulate});
+  final void Function(String recipient, String? amount, String? asset) onScanned;
+  const _ScanView({required this.onScanned});
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.primary, width: 3),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              // Scanner line animation
-              AnimatedBuilder(
-                animation: animCtrl,
-                builder: (_, __) => Positioned(
-                  top: 10 + animCtrl.value * 220,
-                  child: Container(
-                    width: 254,
-                    height: 2,
-                    color: AppColors.primary.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              const Icon(LucideIcons.qrCode, size: 80, color: Colors.grey),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const Text('Pointez vers le QR du destinataire',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 8),
-          const Text('Le nom du destinataire s\'affichera automatiquement.',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 40),
-          CustomButton(
-            text: 'Simuler la lecture (démo)',
-            onPressed: () => onSimulate('+225 07 12 34 56 78'),
-          ),
-        ],
-      ),
-    );
-  }
-}
+    return QrScannerWidget(
+      onDetect: (data) {
+        // Handle Papo QR format: papo:pay/WALLET_ID?asset=XOF&amount=100
+        String recipient = data;
+        String? qrAsset;
+        String? qrAmount;
+        if (data.startsWith('papo:pay/')) {
+          final uri = Uri.tryParse(data.replaceFirst('papo:pay/', 'papo://pay/'));
+          if (uri != null) {
+            recipient = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : data;
+            qrAmount = uri.queryParameters['amount'];
+            qrAsset = uri.queryParameters['asset'];
+          }
+        }
 
-class _ReceiveQrView extends StatelessWidget {
-  final String walletId;
-  final String name;
-  const _ReceiveQrView({required this.walletId, required this.name});
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Mon QR de paiement',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text('Wallet : $walletId',
-              style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace')),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 32, offset: const Offset(0, 8))],
+        final activeAsset = context.read<AppState>().activeSlot?.asset ?? 'XOF';
+        if (qrAsset != null && qrAsset != activeAsset) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Incompatibilité : Ce QR demande du $qrAsset mais votre wallet est en $activeAsset'),
+              backgroundColor: AppColors.danger,
             ),
-            child: QrImageView(
-              data: 'papo:pay/$walletId',
-              version: QrVersions.auto,
-              size: 220,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('En attente du paiement...',
-              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-            const SizedBox(width: 8),
-            const Text('Écoute active', style: TextStyle(color: Colors.grey, fontSize: 12)),
-          ]),
-        ],
-      ),
+          );
+          return;
+        }
+
+        onScanned(recipient, qrAmount, qrAsset);
+      },
     );
   }
 }
@@ -451,35 +376,6 @@ class _ResultViewState extends State<_ResultView> with SingleTickerProviderState
             CustomButton(text: widget.success ? 'Retour à l\'accueil' : 'Réessayer', onPressed: widget.onDone),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _BigButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _BigButton({required this.icon, required this.label, required this.color, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(children: [
-          Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            child: Icon(icon, color: Colors.white, size: 24)),
-          const SizedBox(width: 16),
-          Expanded(child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color, height: 1.4))),
-          Icon(LucideIcons.chevronRight, color: color),
-        ]),
       ),
     );
   }

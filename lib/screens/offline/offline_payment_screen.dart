@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
+import 'package:ndef/ndef.dart' as ndef;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -21,6 +25,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
   bool _broadcasting = false;
   bool _loading = false;
   late final AnimationController _pulseCtrl;
+  late String _asset;
 
   @override
   void initState() {
@@ -28,6 +33,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
     _pulseCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 800))
       ..repeat(reverse: true);
+    _asset = context.read<AppState>().activeSlot?.asset ?? 'XOF';
   }
 
   @override
@@ -42,7 +48,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
     if (!_formKey.currentState!.validate()) return;
     final appState = context.read<AppState>();
     final amount = double.tryParse(_amountCtrl.text) ?? 0;
-    final balance = appState.balances['XOF'] ?? 0;
+    final balance = appState.balances[_asset] ?? 0;
 
     if (amount > balance) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,12 +66,34 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
     final recipient = _recipientCtrl.text.trim();
     setState(() => _loading = true);
 
-    await appState.sendMoney(
+    // 1. Enregistrement local de la transaction signée
+    final success = await appState.sendMoney(
       recipient: recipient,
       amount: amount,
-      asset: 'XOF',
+      asset: _asset,
       isOffline: true,
     );
+
+    if (!success) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
+    // 2. Diffusion via matériel (NFC/Bluetooth)
+    try {
+      // Tentative d'écriture sur un tag NFC si disponible
+      final availability = await FlutterNfcKit.nfcAvailability;
+      if (availability == NFCAvailability.available) {
+        await FlutterNfcKit.poll();
+        // Format de transaction offline Papo
+        await FlutterNfcKit.writeNDEFRecords([
+          ndef.TextRecord(text: "papo:offline/$recipient/$amount/$_asset")
+        ]);
+        await FlutterNfcKit.finish();
+      }
+    } catch (e) {
+      debugPrint('Diffusion NFC echouée: $e');
+    }
 
     if (mounted) {
       setState(() {
@@ -82,7 +110,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final balance = appState.balances['XOF'] ?? 0;
+    final balance = appState.balances[_asset] ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -114,10 +142,10 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withOpacity(0.1),
+                  color: AppColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: AppColors.warning.withOpacity(0.3)),
+                      color: AppColors.warning.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -163,10 +191,10 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Solde XOF disponible',
-                        style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    Text('Solde $_asset disponible',
+                        style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     Text(
-                      formatAmountAbs(balance, 'XOF'),
+                      formatAmountAbs(balance, _asset),
                       style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -187,7 +215,7 @@ class _OfflinePaymentScreenState extends State<OfflinePaymentScreen>
               ),
               const SizedBox(height: 20),
               CustomInput(
-                label: 'Montant (XOF)',
+                label: 'Montant ($_asset)',
                 hint: '0',
                 prefixIcon: LucideIcons.circleDollarSign,
                 keyboardType: TextInputType.number,
@@ -284,10 +312,6 @@ class _BroadcastView extends StatelessWidget {
                   valueColor:
                       AlwaysStoppedAnimation<Color>(AppColors.primary))
             else ...[
-              CustomButton(
-                  text: 'Simuler la transmission réussie',
-                  onPressed: onSuccess),
-              const SizedBox(height: 12),
               CustomButton(
                   text: 'Annuler',
                   isPrimary: false,

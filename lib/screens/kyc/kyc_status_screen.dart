@@ -40,11 +40,9 @@ class KYCStatusScreen extends StatelessWidget {
             desc: 'Nos agents analysent vos pièces. Délai habituel : moins de 24h.',
             children: [
               const SizedBox(height: 16),
-              Row(children: [
-                Expanded(child: CustomButton(text: 'Approuver (Admin)', onPressed: () => appState.approveKYC())),
-                const SizedBox(width: 10),
-                Expanded(child: CustomButton(text: 'Rejeter (Admin)', isPrimary: false, onPressed: () => appState.rejectKYC())),
-              ]),
+              const Center(
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.warning),
+              ),
             ],
           ),
         );

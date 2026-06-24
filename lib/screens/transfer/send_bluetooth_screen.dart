@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -24,32 +26,115 @@ class _SendBluetoothScreenState extends State<SendBluetoothScreen>
   bool _loading = false;
 
   late final AnimationController _radarCtrl;
-
-  // Simulated nearby devices
-  final _nearbyDevices = [
-    {'name': 'Awa Diop', 'device': 'Samsung Galaxy A54', 'signal': 'Fort'},
-    {'name': 'Kofi Mensah', 'device': 'Tecno Camon 20', 'signal': 'Moyen'},
-    {'name': 'Pierre Aka', 'device': 'iPhone 14', 'signal': 'Faible'},
-  ];
+  final List<ScanResult> _scanResults = [];
+  StreamSubscription? _scanSubscription;
 
   @override
   void initState() {
     super.initState();
     _radarCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+
+    // Initialiser l'actif sur celui du wallet actuel
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = context.read<AppState>();
+      if (appState.activeSlot != null) {
+        setState(() => _asset = appState.activeSlot!.asset);
+      }
+    });
   }
 
   @override
   void dispose() {
     _amountCtrl.dispose();
     _radarCtrl.dispose();
+    _scanSubscription?.cancel();
     super.dispose();
   }
 
-  void _startScan() {
-    setState(() => _mode = 'scanning');
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _mode = 'select');
+  void _startScan() async {
+    // 1. Check Permissions
+    if (await Permission.bluetoothScan.request().isDenied ||
+        await Permission.bluetoothConnect.request().isDenied ||
+        await Permission.location.request().isDenied) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permissions Bluetooth/Localisation requises')),
+        );
+      }
+      return;
+    }
+
+    // 2. Check if Bluetooth is supported
+    if (!await FlutterBluePlus.isSupported) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bluetooth non supporté sur cet appareil')),
+        );
+      }
+      return;
+    }
+
+    // 3. Check if Bluetooth is ON
+    if (await FlutterBluePlus.adapterState.first != BluetoothAdapterState.on) {
+      // Request to turn on Bluetooth (Android only, iOS shows system popup)
+      try {
+        await FlutterBluePlus.turnOn();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Veuillez activer le Bluetooth dans les réglages')),
+          );
+        }
+        return;
+      }
+
+      // Wait a bit for adapter to turn on
+      await Future.delayed(const Duration(seconds: 1));
+      if (await FlutterBluePlus.adapterState.first != BluetoothAdapterState.on) return;
+    }
+
+    setState(() {
+      _mode = 'scanning';
+      _scanResults.clear();
     });
+
+    // Listen to scan results
+    _scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
+      if (mounted) {
+        setState(() {
+          for (ScanResult r in results) {
+            // Filter only devices with names
+            if (r.device.platformName.isNotEmpty && !_scanResults.any((existing) => existing.device.remoteId == r.device.remoteId)) {
+              _scanResults.add(r);
+            }
+          }
+          // Sort by signal strength
+          _scanResults.sort((a, b) => b.rssi.compareTo(a.rssi));
+        });
+      }
+    });
+
+    try {
+      // Real scan with timeout
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 15),
+        androidUsesFineLocation: true,
+      );
+    } catch (e) {
+      debugPrint('Error starting scan: $e');
+      if (mounted) setState(() => _mode = 'form');
+      return;
+    }
+
+    // Wait for scan to finish naturally or be stopped
+    await FlutterBluePlus.isScanning.where((s) => s == false).first;
+    if (mounted && _mode == 'scanning') {
+      setState(() => _mode = 'select');
+    }
+  }
+
+  void _stopScan() async {
+    await FlutterBluePlus.stopScan();
   }
 
   Future<void> _execute(AppState appState) async {
@@ -93,10 +178,23 @@ class _SendBluetoothScreenState extends State<SendBluetoothScreen>
         onAssetChange: (a) => setState(() => _asset = a),
         onScan: _startScan,
       );
-      case 'scanning': return _RadarView(ctrl: _radarCtrl);
+      case 'scanning': return _RadarView(
+        ctrl: _radarCtrl,
+        onStop: () {
+          _stopScan();
+          setState(() => _mode = 'select');
+        },
+      );
       case 'select': return _DeviceListView(
-        devices: _nearbyDevices,
-        onSelect: (d) => setState(() { _selectedPeer = '${d['name']} (${d['device']})'; _mode = 'confirm'; }),
+        results: _scanResults,
+        onRestart: _startScan,
+        onSelect: (r) {
+          _stopScan();
+          setState(() {
+            _selectedPeer = r.device.platformName;
+            _mode = 'confirm';
+          });
+        },
       );
       case 'confirm': return _ConfirmView(
         recipient: _selectedPeer,
@@ -195,28 +293,38 @@ class _FormView extends StatelessWidget {
 
 class _RadarView extends StatelessWidget {
   final AnimationController ctrl;
-  const _RadarView({required this.ctrl});
+  final VoidCallback onStop;
+  const _RadarView({required this.ctrl, required this.onStop});
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 200, height: 200,
-            child: AnimatedBuilder(
-              animation: ctrl,
-              builder: (_, __) => CustomPaint(
-                painter: _RadarPainter(ctrl.value),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 200, height: 200,
+              child: AnimatedBuilder(
+                animation: ctrl,
+                builder: (_, __) => CustomPaint(
+                  painter: _RadarPainter(ctrl.value),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 32),
-          const Text('Recherche d\'appareils...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Détection des appareils Bluetooth à proximité', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
-        ],
+            const SizedBox(height: 32),
+            const Text('Recherche d\'appareils...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Détection des appareils Bluetooth à proximité', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            const SizedBox(height: 48),
+            CustomButton(
+              text: 'Arrêter la recherche',
+              isPrimary: false,
+              onPressed: onStop,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -256,28 +364,56 @@ class _RadarPainter extends CustomPainter {
 }
 
 class _DeviceListView extends StatelessWidget {
-  final List<Map<String, String>> devices;
-  final void Function(Map<String, String>) onSelect;
-  const _DeviceListView({required this.devices, required this.onSelect});
+  final List<ScanResult> results;
+  final VoidCallback onRestart;
+  final void Function(ScanResult) onSelect;
+  const _DeviceListView({required this.results, required this.onRestart, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('${devices.length} appareil(s) trouvé(s)',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${results.length} appareil(s) trouvé(s)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 20, color: Colors.blue),
+                onPressed: onRestart,
+                tooltip: 'Relancer le scan',
+              ),
+            ],
+          ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: devices.length,
+          child: results.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Aucun appareil trouvé'),
+                  const SizedBox(height: 16),
+                  CustomButton(
+                    text: 'Relancer la recherche',
+                    isPrimary: false,
+                    onPressed: onRestart,
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+            itemCount: results.length,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemBuilder: (ctx, i) {
-              final d = devices[i];
-              final signalColor = d['signal'] == 'Fort' ? AppColors.success : d['signal'] == 'Moyen' ? AppColors.warning : AppColors.danger;
+              final r = results[i];
+              final rssi = r.rssi;
+              final signal = rssi > -60 ? 'Fort' : rssi > -80 ? 'Moyen' : 'Faible';
+              final signalColor = signal == 'Fort' ? AppColors.success : signal == 'Moyen' ? AppColors.warning : AppColors.danger;
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
@@ -287,16 +423,24 @@ class _DeviceListView extends StatelessWidget {
                     decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
                     child: const Icon(LucideIcons.smartphone, color: Colors.white, size: 20),
                   ),
-                  title: Text(d['name']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text(d['device']!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  title: Text(
+                    r.device.platformName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    r.device.remoteId.toString(),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(LucideIcons.signal, color: signalColor, size: 16),
-                      Text(d['signal']!, style: TextStyle(fontSize: 10, color: signalColor)),
+                      Text(signal, style: TextStyle(fontSize: 10, color: signalColor)),
                     ],
                   ),
-                  onTap: () => onSelect(d),
+                  onTap: () => onSelect(r),
                 ),
               );
             },

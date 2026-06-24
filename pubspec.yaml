@@ -39,6 +39,7 @@ dependencies:
   lucide_icons_flutter: any
   shared_preferences: ^2.5.3
   flutter_nfc_kit: ^3.5.2
+  ndef: ^0.4.0
   cached_network_image: ^3.4.1
   dio: ^5.7.0
   jiffy: ^6.4.5

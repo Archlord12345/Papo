@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -34,6 +36,14 @@ class _SendNfcScreenState extends State<SendNfcScreen>
       ..repeat(reverse: true);
     _waveCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
       ..repeat();
+
+    // Initialiser l'actif sur celui du wallet actuel
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = context.read<AppState>();
+      if (appState.activeSlot != null) {
+        setState(() => _asset = appState.activeSlot!.asset);
+      }
+    });
   }
 
   @override
@@ -44,15 +54,124 @@ class _SendNfcScreenState extends State<SendNfcScreen>
     super.dispose();
   }
 
-  void _startDetection() {
+  void _startDetection() async {
+    // 1. Check NFC Availability
+    final availability = await FlutterNfcKit.nfcAvailability;
+    if (availability == NFCAvailability.not_supported) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('NFC non supporté sur cet appareil')),
+        );
+      }
+      return;
+    }
+
+    if (availability == NFCAvailability.disabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Veuillez activer le NFC dans les paramètres de votre téléphone'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _mode = 'detecting');
-    // Simulate NFC detection after 2s
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() {
-        _detectedPeer = 'Kofi Mensah (+233 24 000 000)';
-        _mode = 'detected';
-      });
-    });
+
+    try {
+      // Scan for a tag or another device
+      final tag = await FlutterNfcKit.poll(
+        timeout: const Duration(seconds: 15),
+        iosAlertMessage: "Approchez l'autre appareil",
+        androidCheckNDEF: true,
+      );
+
+      String peerData = '';
+
+      // Try to read NDEF records if available
+      if (tag.ndefAvailable == true) {
+        final records = await FlutterNfcKit.readNDEFRecords();
+        for (var record in records) {
+          // Check for Papo URI format or raw text
+          final recordStr = record.toString();
+          if (recordStr.contains('papo:pay/')) {
+            peerData = recordStr.split('papo:pay/').last;
+            // Handle query params if any
+            if (peerData.contains('?')) {
+               peerData = peerData.split('?').first;
+            }
+            break;
+          } else if (recordStr.contains('papo:offline/')) {
+             // It's an offline payment being shared
+             _handleOfflineNfc(recordStr);
+             return;
+          }
+        }
+      }
+
+      if (peerData.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Appareil Papo non identifié (NDEF requis)')),
+          );
+          setState(() => _mode = 'form');
+        }
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _detectedPeer = peerData;
+          _mode = 'detected';
+        });
+      }
+
+      await FlutterNfcKit.finish();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _mode = 'form');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('NFC error: $e'), backgroundColor: AppColors.danger),
+        );
+      }
+    }
+  }
+
+  void _handleOfflineNfc(String data) async {
+     // Format: papo:offline/recipient/amount/asset
+     final parts = data.split('/');
+     if (parts.length >= 4) {
+        final recipient = parts[1];
+        final amount = double.tryParse(parts[2]) ?? 0;
+        final asset = parts[3];
+
+        if (mounted) {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Transaction Offline Détectée'),
+              content: Text('Voulez-vous accepter le transfert de ${formatAmountAbs(amount, asset)} vers $recipient ?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Refuser')),
+                ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Accepter')),
+              ],
+            ),
+          );
+
+          if (ok == true && mounted) {
+             final appState = context.read<AppState>();
+             await appState.receiveMoney(amount, asset, senderLabel: 'Reçu via Offline NFC');
+             setState(() {
+                _detectedPeer = recipient;
+                _mode = 'success';
+             });
+          } else {
+             if (mounted) setState(() => _mode = 'form');
+          }
+        }
+     }
   }
 
   Future<void> _execute(AppState appState) async {
@@ -97,7 +216,15 @@ class _SendNfcScreenState extends State<SendNfcScreen>
         onAssetChange: (a) => setState(() => _asset = a),
         onDetect: _startDetection,
       );
-      case 'detecting': return _DetectingView(pulse: _pulseCtrl, wave: _waveCtrl, label: 'Approchez l\'autre téléphone\n(NFC activé)');
+      case 'detecting': return _DetectingView(
+        pulse: _pulseCtrl,
+        wave: _waveCtrl,
+        label: 'Approchez l\'autre téléphone\n(NFC activé)',
+        onStop: () async {
+          await FlutterNfcKit.finish();
+          if (mounted) setState(() => _mode = 'form');
+        },
+      );
       case 'detected': return _DetectedView(
         peer: _detectedPeer,
         amount: double.tryParse(_amountCtrl.text) ?? 0,
@@ -213,55 +340,65 @@ class _DetectingView extends StatelessWidget {
   final AnimationController pulse;
   final AnimationController wave;
   final String label;
-  const _DetectingView({required this.pulse, required this.wave, required this.label});
+  final VoidCallback onStop;
+  const _DetectingView({required this.pulse, required this.wave, required this.label, required this.onStop});
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: pulse,
-            builder: (_, __) => Stack(
-              alignment: Alignment.center,
-              children: [
-                // Outer wave
-                AnimatedBuilder(
-                  animation: wave,
-                  builder: (_, __) => Container(
-                    width: 180 + wave.value * 40,
-                    height: 180 + wave.value * 40,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedBuilder(
+              animation: pulse,
+              builder: (_, __) => Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Outer wave
+                  AnimatedBuilder(
+                    animation: wave,
+                    builder: (_, __) => Container(
+                      width: 180 + wave.value * 40,
+                      height: 180 + wave.value * 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary.withValues(alpha: (1 - wave.value) * 0.06),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 150 + pulse.value * 10,
+                    height: 150 + pulse.value * 10,
                     decoration: BoxDecoration(
-                      color: AppColors.secondary.withValues(alpha: (1 - wave.value) * 0.06),
+                      color: AppColors.secondary.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                   ),
-                ),
-                Container(
-                  width: 150 + pulse.value * 10,
-                  height: 150 + pulse.value * 10,
-                  decoration: BoxDecoration(
-                    color: AppColors.secondary.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
+                    child: const Icon(LucideIcons.nfc, color: Colors.white, size: 48),
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(28),
-                  decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
-                  child: const Icon(LucideIcons.nfc, color: Colors.white, size: 48),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 32),
-          Text(label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.5)),
-          const SizedBox(height: 16),
-          const SizedBox(width: 24, height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.secondary)),
-        ],
+            const SizedBox(height: 32),
+            Text(label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.5)),
+            const SizedBox(height: 16),
+            const SizedBox(width: 24, height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.secondary)),
+            const SizedBox(height: 48),
+            CustomButton(
+              text: 'Annuler la détection',
+              isPrimary: false,
+              onPressed: onStop,
+            ),
+          ],
+        ),
       ),
     );
   }

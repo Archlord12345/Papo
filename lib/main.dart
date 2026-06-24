@@ -60,6 +60,8 @@ import 'screens/profile/profile_screen.dart';
 import 'screens/transfer/send_qr_screen.dart';
 import 'screens/transfer/send_nfc_screen.dart';
 import 'screens/transfer/send_bluetooth_screen.dart';
+import 'screens/transfer/receive_nfc_screen.dart';
+import 'screens/transfer/receive_bluetooth_screen.dart';
 
 // ── Wallet management ─────────────────────────────────────────────────────────
 import 'screens/wallet/wallet_slot_screen.dart';
@@ -177,6 +179,8 @@ class AppShell extends StatelessWidget {
       case 'SendQR':           return const SendQrScreen();
       case 'SendNFC':          return const SendNfcScreen();
       case 'SendBluetooth':    return const SendBluetoothScreen();
+      case 'ReceiveNFC':       return const ReceiveNfcScreen();
+      case 'ReceiveBluetooth': return const ReceiveBluetoothScreen();
       case 'ReceiveMoney':     return const ReceiveMoneyScreen();
       case 'History':          return const HistoryScreen();
       case 'OfflinePayment':   return const OfflinePaymentScreen();

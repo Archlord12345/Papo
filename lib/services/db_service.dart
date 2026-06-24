@@ -29,6 +29,15 @@ class DbService {
     required String phone,
     required String pin,
   }) async {
+    // Supprimer tout utilisateur existant pour respecter "un compte par appareil"
+    final db = await _db.database;
+    await db.delete('users');
+    await db.delete('wallet_slots');
+    await db.delete('transactions');
+    await db.delete('circles');
+    await db.delete('circle_members');
+    await db.delete('sessions');
+
     final addr = sha256.convert(utf8.encode(phone)).toString().substring(0, 16).toUpperCase();
     final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
     final initials = parts.map((p) => p[0].toUpperCase()).take(2).join();
@@ -84,6 +93,11 @@ class DbService {
     return r == null ? null : UserModel.fromMap(r);
   }
 
+  Future<UserModel?> getSavedUser() async {
+    final r = await _db.queryFirst('users');
+    return r == null ? null : UserModel.fromMap(r);
+  }
+
   Future<UserModel?> getUserById(int id) async {
     final r = await _db.queryFirst('users', where: 'id = ?', whereArgs: [id]);
     return r == null ? null : UserModel.fromMap(r);
@@ -121,6 +135,7 @@ class DbService {
     required String blockchainAddr,
     required String name,
     required String deviceName,
+    String asset = 'XOF',
   }) async {
     final existing = await _db.query('wallet_slots', where: 'user_id = ?', whereArgs: [userId]);
     final usedSlots = existing.map((r) => r['slot'] as int).toSet();
@@ -132,7 +147,7 @@ class DbService {
 
     final id = await _db.insert('wallet_slots', {
       'user_id': userId, 'slot': nextSlot, 'wallet_id': _walletId(blockchainAddr, nextSlot),
-      'name': name, 'device_name': deviceName, 'is_active': 0,
+      'name': name, 'device_name': deviceName, 'asset': asset, 'is_active': 0,
       'balance': 0.0, 'created_at': nowIso(),
     });
     final r = await _db.queryFirst('wallet_slots', where: 'id = ?', whereArgs: [id]);
@@ -180,22 +195,22 @@ class DbService {
     return tx;
   }
 
-  /// Atomic transfer: debit balance + record transaction.
   Future<bool> sendMoney({
     required int userId, required int slotId, required String recipient,
-    required double amount, String method = 'standard', bool isOffline = false,
+    required double amount, String asset = 'XOF', String method = 'standard', bool isOffline = false,
   }) async {
     final db = await DatabaseHelper.instance.database;
     bool success = false;
     await db.transaction((txn) async {
       final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
       if (rows.isEmpty) return;
+      final slotAsset = rows.first['asset'] as String;
       final balance = (rows.first['balance'] as num).toDouble();
       if (balance < amount) return;
       await txn.update('wallet_slots', {'balance': balance - amount}, where: 'id = ?', whereArgs: [slotId]);
       await txn.insert('transactions', {
         'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
-        'title': 'Transfert vers $recipient', 'amount': -amount, 'type': isOffline ? 'offline' : 'send',
+        'title': 'Transfert vers $recipient', 'amount': -amount, 'asset': slotAsset, 'type': isOffline ? 'offline' : 'send',
         'status': isOffline ? 'pending' : 'completed',
         'description': isOffline ? 'Signé localement (${method.toUpperCase()})' : 'via ${method.toUpperCase()}',
         'recipient': recipient, 'method': method, 'is_offline': isOffline ? 1 : 0,
@@ -208,17 +223,18 @@ class DbService {
 
   Future<void> receiveMoney({
     required int userId, required int slotId, required double amount,
-    String senderLabel = 'Fonds reçus', String method = 'standard',
+    String asset = 'XOF', String senderLabel = 'Fonds reçus', String method = 'standard',
   }) async {
     final db = await DatabaseHelper.instance.database;
     await db.transaction((txn) async {
       final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
       if (rows.isEmpty) return;
+      final slotAsset = rows.first['asset'] as String;
       final balance = (rows.first['balance'] as num).toDouble();
       await txn.update('wallet_slots', {'balance': balance + amount}, where: 'id = ?', whereArgs: [slotId]);
       await txn.insert('transactions', {
         'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
-        'title': senderLabel, 'amount': amount, 'type': 'receive',
+        'title': senderLabel, 'amount': amount, 'asset': slotAsset, 'type': 'receive',
         'status': 'completed', 'description': 'Reçu via ${method.toUpperCase()}',
         'recipient': '', 'method': method, 'is_offline': 0,
         'created_at': nowIso(),
@@ -226,16 +242,17 @@ class DbService {
     });
   }
 
-  Future<void> topUp({required int userId, required int slotId, required double amount}) async {
+  Future<void> topUp({required int userId, required int slotId, required double amount, String asset = 'XOF'}) async {
     final db = await DatabaseHelper.instance.database;
     await db.transaction((txn) async {
       final rows = await txn.query('wallet_slots', where: 'id = ?', whereArgs: [slotId]);
       if (rows.isEmpty) return;
+      final slotAsset = rows.first['asset'] as String;
       final balance = (rows.first['balance'] as num).toDouble();
       await txn.update('wallet_slots', {'balance': balance + amount}, where: 'id = ?', whereArgs: [slotId]);
       await txn.insert('transactions', {
         'id': _uuid.v4(), 'user_id': userId, 'slot_id': slotId,
-        'title': 'Dépôt XOF', 'amount': amount, 'type': 'deposit',
+        'title': 'Dépôt $slotAsset', 'amount': amount, 'asset': slotAsset, 'type': 'deposit',
         'status': 'completed', 'description': 'Dépôt manuel',
         'recipient': '', 'method': 'standard', 'is_offline': 0,
         'created_at': nowIso(),

@@ -7,9 +7,10 @@ class WalletSlotModel {
   final String walletId;   // PAPO-{addr}-{slot}
   String name;             // label choisi par l'utilisateur
   final String deviceName; // appareil physique associé (devices_catalog)
+  final String asset;      // Devise du wallet (XOF, USD, PAPO, BTC)
   bool isActive;
   final String createdAt;
-  double balance;          // UNIQUE balance XOF
+  double balance;          // UNIQUE balance dans la devise choisie
 
   WalletSlotModel({
     this.id,
@@ -18,10 +19,17 @@ class WalletSlotModel {
     required this.walletId,
     required this.name,
     required this.deviceName,
+    required this.asset,
     this.isActive = false,
     required this.createdAt,
     this.balance = 0,
   });
+
+  double get xofBalance => asset == 'XOF' ? balance : 0; // Only relevant for XOF specific logic
+
+  Map<String, double> get balances => {
+    asset: balance,
+  };
 
   Map<String, dynamic> toMap() => {
     if (id != null) 'id': id,
@@ -30,6 +38,7 @@ class WalletSlotModel {
     'wallet_id': walletId,
     'name': name,
     'device_name': deviceName,
+    'asset': asset,
     'is_active': isActive ? 1 : 0,
     'balance': balance,
     'created_at': createdAt,
@@ -42,6 +51,7 @@ class WalletSlotModel {
     walletId: m['wallet_id'] as String,
     name: m['name'] as String? ?? 'Wallet',
     deviceName: m['device_name'] as String? ?? 'Inconnu',
+    asset: m['asset'] as String? ?? 'XOF',
     isActive: (m['is_active'] as int? ?? 0) == 1,
     createdAt: m['created_at'] as String,
     balance: (m['balance'] as num?)?.toDouble() ?? 0.0,
@@ -51,6 +61,7 @@ class WalletSlotModel {
     int? id,
     String? name,
     String? deviceName,
+    String? asset,
     bool? isActive,
     double? balance,
   }) =>
@@ -61,6 +72,7 @@ class WalletSlotModel {
       walletId: walletId,
       name: name ?? this.name,
       deviceName: deviceName ?? this.deviceName,
+      asset: asset ?? this.asset,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
       balance: balance ?? this.balance,

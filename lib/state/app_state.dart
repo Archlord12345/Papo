@@ -88,8 +88,8 @@ class AppState extends ChangeNotifier {
   /// Active wallet balance (XOF only)
   double get balance => activeSlot?.balance ?? 0;
 
-  // Compat : les anciens écrans utilisent balances['XOF']
-  Map<String, double> get balances => {'XOF': balance};
+  /// Devise et solde du wallet actif
+  Map<String, double> get balances => activeSlot?.balances ?? {'XOF': 0};
 
   /// Active wallet ID e.g. PAPO-ABC123-0
   String get activeWalletId => activeSlot?.walletId ?? '';
@@ -108,6 +108,21 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     deviceCatalog = await _db.getDeviceCatalog();
+
+    // Vérifier si un utilisateur est déjà enregistré sur cet appareil
+    final savedUser = await _db.getSavedUser();
+    if (savedUser != null) {
+      _user = savedUser;
+      _themeMode = savedUser.themeMode == 'dark' ? ThemeMode.dark : ThemeMode.light;
+
+      // Si biométrie activée, on demande le déverrouillage au splash/start
+      if (biometricsEnabled) {
+        setScreen('BiometricLogin');
+      } else {
+        setScreen('Login');
+      }
+    }
+
     notifyListeners();
   }
 
@@ -159,6 +174,12 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  Future<void> unlockWithBiometrics() async {
+    if (_user == null) return;
+    await _loadUserData();
+    setScreen('Dashboard');
+  }
+
   Future<void> logout() async {
     _user = null;
     walletSlots = [];
@@ -176,6 +197,7 @@ class AppState extends ChangeNotifier {
   Future<String?> createWalletSlot({
     required String name,
     required String deviceName,
+    String asset = 'XOF',
   }) async {
     if (walletSlots.length >= 10) return 'Maximum 10 wallets atteint';
     final slot = await _db.createNewSlot(
@@ -183,6 +205,7 @@ class AppState extends ChangeNotifier {
       blockchainAddr: blockchainAddr,
       name: name,
       deviceName: deviceName,
+      asset: asset,
     );
     if (slot == null) return 'Impossible de créer le wallet';
     walletSlots = await _db.getWalletSlots(userId);
@@ -231,11 +254,18 @@ class AppState extends ChangeNotifier {
     final slot = activeSlot;
     if (slot == null) return false;
 
+    // Règle : Transfert uniquement entre devises identiques
+    if (slot.asset != asset) {
+      debugPrint('Erreur : Tentative d\'envoi de $asset depuis un wallet ${slot.asset}');
+      return false;
+    }
+
     final ok = await _db.sendMoney(
       userId: userId,
       slotId: slot.id!,
       recipient: recipient,
       amount: amount,
+      asset: asset,
       method: method,
       isOffline: isOffline,
     );
@@ -244,7 +274,7 @@ class AppState extends ChangeNotifier {
     await _db.addNotification(
       userId: userId,
       title: isOffline ? 'Transaction offline signée' : 'Transfert réussi',
-      content: '${amount.toStringAsFixed(0)} XOF → $recipient (via ${method.toUpperCase()})',
+      content: '${amount.toStringAsFixed(asset == 'BTC' ? 4 : 0)} $asset → $recipient (via ${method.toUpperCase()})',
       type: 'success',
     );
     await _refreshData();
@@ -260,13 +290,14 @@ class AppState extends ChangeNotifier {
       userId: userId,
       slotId: slot.id!,
       amount: amount,
+      asset: asset,
       senderLabel: senderLabel,
       method: method,
     );
     await _db.addNotification(
       userId: userId,
       title: 'Fonds reçus',
-      content: '+${amount.toStringAsFixed(0)} XOF reçus sur ${slot.name}',
+      content: '+${amount.toStringAsFixed(asset == 'BTC' ? 4 : 0)} $asset reçus sur ${slot.name}',
       type: 'success',
     );
     await _refreshData();
@@ -275,11 +306,11 @@ class AppState extends ChangeNotifier {
   Future<void> topUp(double amount, String asset) async {
     final slot = activeSlot;
     if (slot == null) return;
-    await _db.topUp(userId: userId, slotId: slot.id!, amount: amount);
+    await _db.topUp(userId: userId, slotId: slot.id!, amount: amount, asset: asset);
     await _db.addNotification(
       userId: userId,
       title: 'Dépôt réussi',
-      content: '+${amount.toStringAsFixed(0)} XOF crédités sur ${slot.name}',
+      content: '+${amount.toStringAsFixed(asset == 'BTC' ? 4 : 0)} $asset crédités sur ${slot.name}',
       type: 'success',
     );
     await _refreshData();

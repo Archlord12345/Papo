@@ -15,6 +15,7 @@ class CreateWalletScreen extends StatefulWidget {
 class _CreateWalletScreenState extends State<CreateWalletScreen> {
   final _nameCtrl = TextEditingController();
   String? _selectedDevice;
+  String _selectedAsset = 'XOF';
   bool _loading = false;
 
   @override
@@ -75,6 +76,39 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
               hint: 'ex: Wallet Famille, Épargne BTC...',
               prefixIcon: LucideIcons.tag,
               controller: _nameCtrl,
+            ),
+            const SizedBox(height: 24),
+
+            // Asset selection
+            const Text('Devise du solde', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 10),
+            Row(
+              children: ['XOF', 'USD', 'PAPO', 'BTC'].map((asset) {
+                final isSelected = _selectedAsset == asset;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedAsset = asset),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primary : (isDark ? AppColors.darkSurface : Colors.white),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isSelected ? AppColors.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          asset,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 24),
 
@@ -159,6 +193,7 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
                 final error = await appState.createWalletSlot(
                   name: _nameCtrl.text.trim(),
                   deviceName: _selectedDevice!,
+                  asset: _selectedAsset,
                 );
                 if (mounted) {
                   setState(() => _loading = false);

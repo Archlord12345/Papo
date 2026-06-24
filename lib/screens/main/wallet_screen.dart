@@ -25,7 +25,6 @@ class WalletScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final slot = appState.activeSlot;
     final balances = slot?.balances ?? {};
-    final total = _totalInXof(balances);
 
     return Scaffold(
       appBar: AppBar(
@@ -116,48 +115,6 @@ class WalletScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Pie chart
-            if (total > 0) ...[
-              const Text('Répartition', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  SizedBox(
-                    height: 150,
-                    width: 150,
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 3,
-                        centerSpaceRadius: 38,
-                        sections: _buildSections(balances, total),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _assetColors.entries.map((e) {
-                        final bal = balances[e.key] ?? 0;
-                        final pct = total > 0 ? (bal / total * 100).toStringAsFixed(0) : '0';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(children: [
-                            Container(width: 12, height: 12, decoration: BoxDecoration(color: e.value, shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const Spacer(),
-                            Text('$pct%', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                          ]),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-            ],
-
             // Top up
             CustomButton(
               text: 'Déposer des fonds',
@@ -175,29 +132,6 @@ class WalletScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  double _totalInXof(Map<String, double> b) =>
-      (b['XOF'] ?? 0) + (b['USD'] ?? 0) * 600 + (b['PAPO'] ?? 0) * 10 + (b['BTC'] ?? 0) * 30000000;
-
-  List<PieChartSectionData> _buildSections(Map<String, double> b, double total) {
-    return _assetColors.entries.map((e) {
-      double v;
-      switch (e.key) {
-        case 'USD': v = (b[e.key] ?? 0) * 600; break;
-        case 'PAPO': v = (b[e.key] ?? 0) * 10; break;
-        case 'BTC': v = (b[e.key] ?? 0) * 30000000; break;
-        default: v = b[e.key] ?? 0;
-      }
-      final pct = total > 0 ? (v / total * 100).toStringAsFixed(0) : '0';
-      return PieChartSectionData(
-        value: v > 0 ? v : 0.01,
-        color: e.value,
-        title: v > 0 ? '$pct%' : '',
-        radius: 48,
-        titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 10),
-      );
-    }).toList();
   }
 
   void _showTopUpDialog(BuildContext context, AppState appState) {

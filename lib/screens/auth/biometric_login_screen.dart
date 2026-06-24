@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -16,6 +17,7 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
     with SingleTickerProviderStateMixin {
   bool _scanning = false;
   late final AnimationController _pulse;
+  final LocalAuthentication _auth = LocalAuthentication();
 
   @override
   void initState() {
@@ -26,6 +28,9 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
         lowerBound: 0.9,
         upperBound: 1.1)
       ..repeat(reverse: true);
+
+    // Auto-start auth
+    WidgetsBinding.instance.addPostFrameCallback((_) => _authenticate());
   }
 
   @override
@@ -34,11 +39,43 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
     super.dispose();
   }
 
-  void _simulate() {
-    setState(() => _scanning = true);
-    Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) context.read<AppState>().setScreen('Dashboard');
-    });
+  Future<void> _authenticate() async {
+    try {
+      final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
+      final bool canAuthenticate = canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
+
+      if (!canAuthenticate) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Biométrie non disponible sur cet appareil')),
+          );
+        }
+        return;
+      }
+
+      setState(() => _scanning = true);
+
+      final bool didAuthenticate = await _auth.authenticate(
+        localizedReason: 'Veuillez vous authentifier pour accéder à Papo',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+
+      if (didAuthenticate && mounted) {
+        context.read<AppState>().unlockWithBiometrics();
+      } else {
+        if (mounted) setState(() => _scanning = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _scanning = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur d\'authentification: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -85,8 +122,8 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
               const SizedBox(height: 56),
               if (!_scanning) ...[
                 CustomButton(
-                  text: 'Simuler la lecture',
-                  onPressed: _simulate,
+                  text: 'S\'authentifier',
+                  onPressed: _authenticate,
                 ),
                 const SizedBox(height: 16),
                 CustomButton(
