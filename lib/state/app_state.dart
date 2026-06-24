@@ -1,535 +1,533 @@
 import 'package:flutter/material.dart';
-
-import '../services/local_storage_service.dart';
-
-class Transaction {
-  final String id;
-  final String title;
-  final double amount;
-  final String asset;
-  final String type; // 'send', 'receive', 'offline', 'merchant'
-  final DateTime timestamp;
-  String status; // 'completed', 'pending', 'failed'
-  final String description;
-
-  Transaction({
-    required this.id,
-    required this.title,
-    required this.amount,
-    required this.asset,
-    required this.type,
-    required this.timestamp,
-    required this.status,
-    required this.description,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'title': title,
-    'amount': amount,
-    'asset': asset,
-    'type': type,
-    'timestamp': timestamp.toIso8601String(),
-    'status': status,
-    'description': description,
-  };
-
-  factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
-    id: map['id'],
-    title: map['title'],
-    amount: (map['amount'] as num).toDouble(),
-    asset: map['asset'],
-    type: map['type'],
-    timestamp: DateTime.parse(map['timestamp']),
-    status: map['status'],
-    description: map['description'],
-  );
-}
-
-class NotificationModel {
-  final String id;
-  final String title;
-  final String content;
-  final String type; // 'security', 'success', 'info'
-  final DateTime timestamp;
-  bool isRead;
-
-  NotificationModel({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.type,
-    required this.timestamp,
-    this.isRead = false,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'title': title,
-    'content': content,
-    'type': type,
-    'timestamp': timestamp.toIso8601String(),
-    'isRead': isRead,
-  };
-
-  factory NotificationModel.fromMap(Map<String, dynamic> map) => NotificationModel(
-    id: map['id'],
-    title: map['title'],
-    content: map['content'],
-    type: map['type'],
-    timestamp: DateTime.parse(map['timestamp']),
-    isRead: map['isRead'] ?? false,
-  );
-}
+import '../models/user_model.dart';
+import '../models/wallet_slot_model.dart';
+import '../models/transaction_model.dart';
+import '../models/notification_model.dart';
+import '../models/circle_model.dart';
+import '../services/db_service.dart';
 
 class AppState extends ChangeNotifier {
-  // Navigation
-  String _currentScreen = "Splash";
-  String get currentScreen => _currentScreen;
-  
-  List<String> recentlyVisited = ['Dashboard', 'Wallet', 'Circle', 'Developer'];
+  final DbService _db = DbService();
 
-  void setScreen(String screenName) {
-    _currentScreen = screenName;
-    if (['Dashboard', 'Wallet', 'Circle', 'Developer'].contains(screenName)) {
-      recentlyVisited.remove(screenName);
-      recentlyVisited.insert(0, screenName);
-      if (recentlyVisited.length > 4) {
-        recentlyVisited.removeLast();
-      }
+  // ── Navigation stack ───────────────────────────────────────────────────────
+  final List<String> _navStack = ['Splash'];
+
+  String get currentScreen => _navStack.last;
+
+  /// Push a new screen (go forward)
+  void setScreen(String screen) {
+    if (_navStack.last == screen) return;
+    // Tab screens replace stack for cleaner navigation
+    const tabScreens = {'Dashboard', 'Wallet', 'SendMoney', 'History', 'Menu'};
+    if (tabScreens.contains(screen)) {
+      // Keep only base screens below current tab root
+      _navStack.clear();
+      _navStack.add(screen);
+    } else {
+      _navStack.add(screen);
     }
     notifyListeners();
   }
 
-  // Language
-  String language = 'fr';
-  void changeLanguage(String lang) {
-    language = lang;
+  /// Pop back to previous screen. Returns false if nothing to pop.
+  bool popScreen() {
+    if (_navStack.length <= 1) return false;
+    _navStack.removeLast();
+    notifyListeners();
+    return true;
+  }
+
+  /// Replace current screen (no back possible to previous)
+  void replaceScreen(String screen) {
+    _navStack.clear();
+    _navStack.add(screen);
     notifyListeners();
   }
 
-  // Theme Mode
+  /// Clear stack and set root (for logout / login transitions)
+  void resetToScreen(String screen) {
+    _navStack.clear();
+    _navStack.add(screen);
+    notifyListeners();
+  }
+
+  bool get canGoBack => _navStack.length > 1;
+
+  // ── Authenticated user ─────────────────────────────────────────────────────
+  UserModel? _user;
+  UserModel? get user => _user;
+  bool get isLoggedIn => _user != null;
+  int get userId => _user?.id ?? 0;
+
+  String get userName => _user?.name ?? '';
+  String get userPhone => _user?.phone ?? '';
+  String get blockchainAddr => _user?.blockchainAddr ?? '';
+  String get avatarInitials => _user?.initials ?? '';
+  bool get isMerchant => _user?.isMerchant ?? false;
+  String get kycStatus => _user?.kycStatus ?? 'none';
+  bool get isFaceVerified => _user?.faceVerified ?? false;
+  bool get biometricsEnabled => _user?.biometricsEnabled ?? true;
+  bool get twoFactorEnabled => _user?.twoFactorEnabled ?? false;
+  String get language => _user?.language ?? 'fr';
+  String get walletAddress => activeWalletId;
+  String get kycDocType => _user?.kycDocType ?? '';
+  String get kycDocName => _user?.kycDocName ?? '';
+
+  // ── Theme ──────────────────────────────────────────────────────────────────
   ThemeMode _themeMode = ThemeMode.dark;
   ThemeMode get themeMode => _themeMode;
 
-  // User Profile
-  bool isLoggedIn = false;
-  String userName = "";
-  String userPhone = "";
-  String walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
-  String avatarInitials = "";
-  bool isMerchant = false;
-  String? userPin;
+  // ── Wallet slots ──────────────────────────────────────────────────────────
+  List<WalletSlotModel> walletSlots = [];
+  WalletSlotModel? get activeSlot =>
+      walletSlots.isEmpty ? null : walletSlots.firstWhere(
+        (s) => s.isActive,
+        orElse: () => walletSlots.first,
+      );
 
-  // Balances
-  Map<String, double> balances = {
-    'XOF': 0,
-    'USD': 0,
-    'PAPO': 0,
-    'BTC': 0,
-  };
+  /// Active wallet ID e.g. PAPO-ABC123-0
+  String get activeWalletId => activeSlot?.walletId ?? '';
 
-  // Lists
-  List<Transaction> transactions = [];
-  List<Transaction> offlineQueue = [];
+  /// Active balances (shortcut)
+  Map<String, double> get balances => activeSlot?.balances ?? {};
+
+  // ── Device catalog ────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> deviceCatalog = [];
+
+  // ── Cached data ───────────────────────────────────────────────────────────
+  List<TransactionModel> transactions = [];
+  List<TransactionModel> offlineQueue = [];
   List<NotificationModel> notifications = [];
-  
-  List<String> activeDevices = [
-    "Tecno Camon 20 • Abidjan, CI (Actuel)",
-  ];
+  List<Map<String, dynamic>> sessions = [];
+  // Alias for backward compat
+  List<Map<String, dynamic>> get devices => sessions;
+  List<CircleModel> circles = [];
 
-  // KYC States
-  String kycStatus = "none"; 
-  String? uploadedDocType;
-  String? uploadedDocName;
-  bool isFaceVerified = false;
+  // ── Init ──────────────────────────────────────────────────────────────────
 
-  // Security
-  bool biometricsEnabled = true;
-  bool twoFactorEnabled = false;
-
-  final LocalStorageService _localStorageService = LocalStorageService();
-  List<Map<String, dynamic>> pairedDevices = [];
-
-  AppState() {
-    _restoreLocalData();
-  }
-
-  Future<void> _restoreLocalData() async {
-    final profile = await _localStorageService.loadUserProfile();
-    if (profile != null) {
-      userName = profile['name'] ?? "";
-      userPhone = profile['phone'] ?? "";
-      userPin = profile['pin'];
-      walletAddress = profile['walletAddress'] ?? "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
-      avatarInitials = profile['initials'] ?? "";
-      isLoggedIn = profile['isLoggedIn'] ?? false;
-      kycStatus = profile['kycStatus'] ?? "none";
-      isFaceVerified = profile['isFaceVerified'] ?? false;
-    }
-
-    balances = await _localStorageService.loadBalances();
-    if (balances.isEmpty) {
-      balances = {'XOF': 0, 'USD': 0, 'PAPO': 0, 'BTC': 0};
-    }
-
-    final txData = await _localStorageService.loadTransactions();
-    transactions = txData.map((e) => Transaction.fromMap(e)).toList();
-
-    pairedDevices = await _localStorageService.loadPairings();
+  Future<void> init() async {
+    deviceCatalog = await _db.getDeviceCatalog();
     notifyListeners();
   }
 
-  Future<void> _persistProfile() async {
-    await _localStorageService.saveUserProfile({
-      'name': userName,
-      'phone': userPhone,
-      'pin': userPin,
-      'walletAddress': walletAddress,
-      'initials': avatarInitials,
-      'isLoggedIn': isLoggedIn,
-      'kycStatus': kycStatus,
-      'isFaceVerified': isFaceVerified,
-    });
-  }
-
-  Future<void> _persistBalances() async {
-    await _localStorageService.saveBalances(balances);
-  }
-
-  Future<void> _persistTransactions() async {
-    final data = transactions.map((tx) => tx.toMap()).toList();
-    await _localStorageService.saveTransactions(data);
-  }
-
-  // --- Auth Actions ---
-
-  Future<bool> register(String name, String phone, String pin) async {
-    userName = name;
-    userPhone = phone;
-    userPin = pin;
-    
-    final phoneHash = phone.hashCode.toRadixString(16).padLeft(8, '0');
-    walletAddress = "0x${phoneHash}6EC7ab88b098defB751B7401B5f6d8976F".toUpperCase();
-    
-    // Generate initials safely
-    if (name.isNotEmpty) {
-      final names = name.trim().split(" ");
-      avatarInitials = names
-          .where((n) => n.isNotEmpty)
-          .map((n) => n[0])
-          .take(2)
-          .join()
-          .toUpperCase();
-    } else {
-      avatarInitials = "??";
-    }
-    isLoggedIn = true;
-    
-    // Initial gift
-    balances['PAPO'] = 1000;
-    balances['XOF'] = 5000;
-
-    await _persistProfile();
-    await _persistBalances();
-    
-    addNotification("Bienvenue !", "Merci d'avoir rejoint PAYPOINT. Vous avez reçu 1000 PAPO en bonus.", "success");
+  Future<void> _loadUserData() async {
+    if (_user == null) return;
+    final uid = userId;
+    walletSlots = await _db.getWalletSlots(uid);
+    transactions = await _db.getTransactions(uid);
+    offlineQueue = await _db.getOfflineQueue(uid);
+    notifications = await _db.getNotifications(uid);
+    sessions = await _db.getSessions(uid);
+    circles = await _db.getCircles(uid);
     notifyListeners();
-    return true;
   }
 
-  Future<bool> login(String phone, String pin) async {
-    if (userPhone == phone && userPin == pin) {
-      isLoggedIn = true;
-      await _persistProfile();
-      addNotification("Connexion", "Bon retour sur votre compte PAYPOINT.", "security");
-      notifyListeners();
-      return true;
+  // ── AUTH ──────────────────────────────────────────────────────────────────
+
+  Future<String?> register(String name, String phone, String pin) async {
+    if (name.trim().isEmpty) return 'Veuillez saisir votre nom complet';
+    if (phone.trim().isEmpty) return 'Numéro de téléphone requis';
+    if (pin.length < 4) return 'Code PIN minimum 4 chiffres';
+
+    if (await _db.phoneExists(phone.trim())) {
+      return 'Ce numéro est déjà enregistré';
     }
-    return false;
+
+    _user = await _db.createUser(name: name.trim(), phone: phone.trim(), pin: pin);
+    _themeMode = ThemeMode.dark;
+    await _loadUserData();
+    return null;
+  }
+
+  Future<String?> login(String phone, String pin) async {
+    if (phone.trim().isEmpty || pin.isEmpty) return 'Champs obligatoires';
+    final u = await _db.loginUser(phone.trim(), pin);
+    if (u == null) return 'Numéro ou PIN incorrect';
+
+    _user = u;
+    _themeMode = u.themeMode == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    await _loadUserData();
+    await _db.addNotification(
+      userId: userId,
+      title: 'Connexion',
+      content: 'Bon retour ${u.name} !',
+      type: 'security',
+    );
+    notifications = await _db.getNotifications(userId);
+    notifyListeners();
+    return null;
   }
 
   Future<void> logout() async {
-    isLoggedIn = false;
-    await _persistProfile();
-    setScreen("Login");
+    _user = null;
+    walletSlots = [];
+    transactions = [];
+    offlineQueue = [];
+    notifications = [];
+    sessions = [];
+    circles = [];
+    resetToScreen('Login');
+  }
+
+  // ── WALLET MANAGEMENT ─────────────────────────────────────────────────────
+
+  /// Returns null if max 10 slots reached, or error string.
+  Future<String?> createWalletSlot({
+    required String name,
+    required String deviceName,
+  }) async {
+    if (walletSlots.length >= 10) return 'Maximum 10 wallets atteint';
+    final slot = await _db.createNewSlot(
+      userId: userId,
+      blockchainAddr: blockchainAddr,
+      name: name,
+      deviceName: deviceName,
+    );
+    if (slot == null) return 'Impossible de créer le wallet';
+    walletSlots = await _db.getWalletSlots(userId);
+    await _db.addNotification(
+      userId: userId,
+      title: 'Wallet créé',
+      content: '$name (${slot.walletId}) a été activé.',
+      type: 'success',
+    );
+    notifications = await _db.getNotifications(userId);
+    notifyListeners();
+    return null;
+  }
+
+  Future<void> setActiveWalletSlot(int slotId) async {
+    await _db.setActiveSlot(userId, slotId);
+    walletSlots = await _db.getWalletSlots(userId);
+    transactions = await _db.getTransactions(userId);
     notifyListeners();
   }
 
-  // --- Wallet Actions (CRUD) ---
+  Future<void> renameWalletSlot(int slotId, String newName) async {
+    await _db.updateSlotName(slotId, newName);
+    walletSlots = await _db.getWalletSlots(userId);
+    notifyListeners();
+  }
 
-  // CREATE Transaction is handled by send/receive
-  // READ is via the transactions list
+  Future<String?> deleteWalletSlot(int slotId) async {
+    final slot = walletSlots.firstWhere((s) => s.id == slotId, orElse: () => walletSlots.first);
+    if (slot.isActive) return 'Impossible de supprimer le wallet actif';
+    await _db.deleteSlot(slotId);
+    walletSlots = await _db.getWalletSlots(userId);
+    notifyListeners();
+    return null;
+  }
 
-  // UPDATE balance (Top up simulation)
-  void topUp(double amount, String asset) {
-    balances[asset] = (balances[asset] ?? 0) + amount;
-    
-    transactions.insert(0, Transaction(
-      id: "DEP-${DateTime.now().millisecondsSinceEpoch}",
-      title: "Dépôt $asset",
+  // ── TRANSFERS ─────────────────────────────────────────────────────────────
+
+  Future<bool> sendMoney({
+    required String recipient,
+    required double amount,
+    required String asset,
+    String method = 'standard',
+    bool isOffline = false,
+  }) async {
+    final slot = activeSlot;
+    if (slot == null) return false;
+
+    final ok = await _db.sendMoney(
+      userId: userId,
+      slotId: slot.id!,
+      recipient: recipient,
       amount: amount,
       asset: asset,
-      type: "receive",
-      timestamp: DateTime.now(),
-      status: "completed",
-      description: "Dépôt manuel pour simulation",
-    ));
-
-    _persistBalances();
-    _persistTransactions();
-    addNotification("Dépôt réussi", "Votre compte a été crédité de $amount $asset.", "success");
-    notifyListeners();
-  }
-
-  // DELETE/Reset Wallet (for testing/real use case)
-  Future<void> resetWallet() async {
-    balances = {'XOF': 0, 'USD': 0, 'PAPO': 0, 'BTC': 0};
-    transactions.clear();
-    await _persistBalances();
-    await _persistTransactions();
-    notifyListeners();
-  }
-
-  // Send Money Action
-  bool sendMoney(String recipient, double amount, String asset) {
-    double currentBal = balances[asset] ?? 0;
-    if (currentBal < amount) return false;
-
-    balances[asset] = currentBal - amount;
-    
-    transactions.insert(
-      0,
-      Transaction(
-        id: "TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-        title: "Transfert vers $recipient",
-        amount: -amount,
-        asset: asset,
-        type: "send",
-        timestamp: DateTime.now(),
-        status: "completed",
-        description: "Transfert immédiat initié depuis l'application",
-      ),
+      method: method,
+      isOffline: isOffline,
     );
+    if (!ok) return false;
 
-    _persistBalances();
-    _persistTransactions();
-
-    addNotification(
-      "Transfert réussi",
-      "Vous avez envoyé $amount $asset à $recipient avec succès.",
-      "success"
+    await _db.addNotification(
+      userId: userId,
+      title: isOffline ? 'Transaction offline signée' : 'Transfert réussi',
+      content: '${amount.toStringAsFixed(0)} $asset → $recipient (via ${method.toUpperCase()})',
+      type: 'success',
     );
-
-    notifyListeners();
+    await _refreshData();
     return true;
   }
 
-  // Receive Money Action
-  void receiveMoney(double amount, String asset) {
-    double currentBal = balances[asset] ?? 0;
-    balances[asset] = currentBal + amount;
+  Future<void> receiveMoney(double amount, String asset,
+      {String senderLabel = 'Fonds reçus', String method = 'standard'}) async {
+    final slot = activeSlot;
+    if (slot == null) return;
 
-    transactions.insert(
-      0,
-      Transaction(
-        id: "TX-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-        title: "Reçu de fonds",
-        amount: amount,
-        asset: asset,
-        type: "receive",
-        timestamp: DateTime.now(),
-        status: "completed",
-        description: "Fonds reçus via code QR",
-      ),
+    await _db.receiveMoney(
+      userId: userId,
+      slotId: slot.id!,
+      amount: amount,
+      asset: asset,
+      senderLabel: senderLabel,
+      method: method,
     );
-
-    _persistBalances();
-    _persistTransactions();
-
-    addNotification(
-      "Fonds reçus",
-      "Vous avez reçu $amount $asset sur votre portefeuille.",
-      "success"
+    await _db.addNotification(
+      userId: userId,
+      title: 'Fonds reçus',
+      content: '+${amount.toStringAsFixed(0)} $asset reçus sur ${slot.name}',
+      type: 'success',
     );
+    await _refreshData();
+  }
 
+  Future<void> topUp(double amount, String asset) async {
+    final slot = activeSlot;
+    if (slot == null) return;
+    await _db.topUp(userId: userId, slotId: slot.id!, amount: amount, asset: asset);
+    await _db.addNotification(
+      userId: userId,
+      title: 'Dépôt réussi',
+      content: '+${amount.toStringAsFixed(0)} $asset crédités sur ${slot.name}',
+      type: 'success',
+    );
+    await _refreshData();
+  }
+
+  Future<void> syncOfflineTransactions() async {
+    final count = offlineQueue.length;
+    await _db.syncOfflineTransactions(userId);
+    await _db.addNotification(
+      userId: userId,
+      title: 'Synchronisation réussie',
+      content: '$count transaction(s) ancrées sur la blockchain.',
+      type: 'success',
+    );
+    await _refreshData();
+  }
+
+  // ── KYC ──────────────────────────────────────────────────────────────────
+
+  Future<void> uploadKYCDocument(String type, String name) async {
+    _user = _user!.copyWith(kycDocType: type, kycDocName: name, kycStatus: 'pending');
+    await _db.updateUser(_user!);
+    await _db.addNotification(userId: userId, title: 'KYC Soumis', content: 'Documents ($type) soumis.', type: 'info');
+    await _refreshNotifications();
     notifyListeners();
   }
 
-  // Offline Payment Queue Action
-  void addOfflineTransaction(double amount, String recipient) {
-    double currentBal = balances['XOF'] ?? 0;
-    balances['XOF'] = currentBal - amount; // deduct locally
+  Future<void> verifyFace() async {
+    _user = _user!.copyWith(faceVerified: true);
+    await _db.updateUser(_user!);
+    notifyListeners();
+  }
 
-    Transaction offTx = Transaction(
-      id: "OFF-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}",
-      title: "Paiement Offline vers $recipient",
+  Future<void> approveKYC() async {
+    _user = _user!.copyWith(kycStatus: 'verified');
+    await _db.updateUser(_user!);
+    await _db.addNotification(userId: userId, title: 'Compte vérifié', content: 'Identité approuvée ! Limites débloquées.', type: 'success');
+    await _refreshNotifications();
+    notifyListeners();
+  }
+
+  Future<void> rejectKYC() async {
+    _user = _user!.copyWith(kycStatus: 'rejected');
+    await _db.updateUser(_user!);
+    await _db.addNotification(userId: userId, title: 'KYC Rejeté', content: 'Documents refusés. Veuillez soumettre à nouveau.', type: 'security');
+    await _refreshNotifications();
+    notifyListeners();
+  }
+
+  Future<void> resetKYC() async {
+    _user = _user!.copyWith(kycStatus: 'none', kycDocType: null, kycDocName: null, faceVerified: false);
+    await _db.updateUser(_user!);
+    notifyListeners();
+  }
+
+  // ── SECURITY ─────────────────────────────────────────────────────────────
+
+  Future<void> toggleBiometrics() async {
+    _user = _user!.copyWith(biometricsEnabled: !biometricsEnabled);
+    await _db.updateUser(_user!);
+    notifyListeners();
+  }
+
+  Future<void> toggle2FA() async {
+    _user = _user!.copyWith(twoFactorEnabled: !twoFactorEnabled);
+    await _db.updateUser(_user!);
+    notifyListeners();
+  }
+
+  Future<bool> changePin(String currentPin, String newPin) async {
+    final check = await _db.loginUser(userPhone, currentPin);
+    if (check == null) return false;
+    await _db.changePin(userId, newPin);
+    await _db.addNotification(userId: userId, title: 'PIN modifié', content: 'Code PIN mis à jour.', type: 'security');
+    await _refreshNotifications();
+    return true;
+  }
+
+  Future<void> removeSession(int sessionId, String label) async {
+    await _db.removeSession(sessionId);
+    await _db.addNotification(userId: userId, title: 'Appareil révoqué', content: 'Session sur $label clôturée.', type: 'security');
+    await _refreshData();
+  }
+
+  // Alias for backward compat
+  Future<void> removeDevice(int sessionId, String label) => removeSession(sessionId, label);
+
+  // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+
+  Future<void> addNotification(String title, String content, String type) async {
+    await _db.addNotification(userId: userId, title: title, content: content, type: type);
+    await _refreshNotifications();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await _db.markNotificationRead(id);
+    final i = notifications.indexWhere((n) => n.id == id);
+    if (i != -1) { notifications[i].isRead = true; notifyListeners(); }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    await _db.markAllNotificationsRead(userId);
+    for (final n in notifications) n.isRead = true;
+    notifyListeners();
+  }
+
+  int get unreadCount => notifications.where((n) => !n.isRead).length;
+
+  // ── CIRCLE ────────────────────────────────────────────────────────────────
+
+  Future<String?> createCircle({
+    required String name,
+    required String description,
+    required double target,
+    required double contribution,
+    required String frequency,
+  }) async {
+    if (name.trim().isEmpty) return 'Nom requis';
+    await _db.createCircle(
+      userId: userId,
+      name: name.trim(),
+      description: description,
+      target: target,
+      contribution: contribution,
+      frequency: frequency,
+    );
+    await _refreshData();
+    return null;
+  }
+
+  Future<void> updateCircle(CircleModel circle) async {
+    await _db.updateCircle(circle);
+    await _refreshData();
+  }
+
+  Future<void> deleteCircle(int circleId) async {
+    await _db.deleteCircle(circleId);
+    await _refreshData();
+  }
+
+  Future<String?> addCircleMember({
+    required int circleId,
+    required String name,
+    required String phone,
+    String walletId = '',
+  }) async {
+    if (name.trim().isEmpty) return 'Nom requis';
+    await _db.addCircleMember(
+      circleId: circleId,
+      name: name.trim(),
+      phone: phone.trim(),
+      walletId: walletId,
+    );
+    circles = await _db.getCircles(userId);
+    notifyListeners();
+    return null;
+  }
+
+  Future<void> removeCircleMember(int memberId) async {
+    await _db.removeCircleMember(memberId);
+    circles = await _db.getCircles(userId);
+    notifyListeners();
+  }
+
+  Future<bool> contributeToCircle(int circleId, int memberId, double amount, String asset) async {
+    final slot = activeSlot;
+    if (slot == null) return false;
+    final balance = slot.balances[asset] ?? 0;
+    if (balance < amount) return false;
+
+    await _db.adjustSlotBalance(slot.id!, asset, -amount);
+    await _db.markMemberPaid(circleId, memberId, amount);
+    await _db.createTransaction(
+      userId: userId,
+      slotId: slot.id!,
+      title: 'Contribution Tontine',
       amount: -amount,
-      asset: "XOF",
-      type: "offline",
-      timestamp: DateTime.now(),
-      status: "pending",
-      description: "Signé localement par Bluetooth/NFC (En attente de synchro)",
+      asset: asset,
+      type: 'tontine',
+      description: 'Versement mensuel — cercle de confiance',
+      recipient: 'Tontine',
     );
-
-    offlineQueue.insert(0, offTx);
-    transactions.insert(0, offTx);
-
-    addNotification(
-      "Transaction Offline signée",
-      "Paiement de $amount XOF vers $recipient signé localement. Synchronisation requise.",
-      "info"
+    await _db.addNotification(
+      userId: userId,
+      title: 'Tontine versée',
+      content: 'Versement de ${amount.toStringAsFixed(0)} $asset confirmé.',
+      type: 'success',
     );
-
-    persistOfflineQueueSnapshot();
-    notifyListeners();
+    await _refreshData();
+    return true;
   }
 
-  // Sync Offline Queue
-  void syncOfflineTransactions() {
-    if (offlineQueue.isEmpty) return;
+  // ── BILLS ─────────────────────────────────────────────────────────────────
 
-    for (var tx in offlineQueue) {
-      // Find inside transaction list and update status
-      int index = transactions.indexWhere((element) => element.id == tx.id);
-      if (index != -1) {
-        transactions[index].status = "completed";
-      }
-    }
-    
-    int count = offlineQueue.length;
-    offlineQueue.clear();
-
-    addNotification(
-      "Synchronisation réussie",
-      "Vos $count transactions hors ligne ont été ancrées sur la blockchain avec succès.",
-      "success"
+  Future<bool> payBill({
+    required String provider,
+    required String reference,
+    required double amount,
+    String asset = 'XOF',
+  }) async {
+    final slot = activeSlot;
+    if (slot == null) return false;
+    final ok = await _db.payBill(
+      userId: userId,
+      slotId: slot.id!,
+      provider: provider,
+      reference: reference,
+      amount: amount,
+      asset: asset,
     );
+    if (ok) await _refreshData();
+    return ok;
+  }
 
-    persistOfflineQueueSnapshot();
+  // ── SETTINGS ─────────────────────────────────────────────────────────────
+
+  Future<void> changeLanguage(String lang) async {
+    _user = _user!.copyWith(language: lang);
+    await _db.updateUser(_user!);
     notifyListeners();
   }
 
-  // KYC Actions
-  void uploadKYCDocument(String type, String name) {
-    uploadedDocType = type;
-    uploadedDocName = name;
-    kycStatus = "pending";
-    
-    addNotification(
-      "KYC Soumis",
-      "Vos documents d'identité ($type) ont été soumis pour vérification.",
-      "info"
-    );
-    notifyListeners();
-  }
-
-  void verifyFace() {
-    isFaceVerified = true;
-    notifyListeners();
-  }
-
-  void approveKYC() {
-    kycStatus = "verified";
-    addNotification(
-      "Compte vérifié",
-      "Félicitations, votre identité a été approuvée ! Limites de compte débloquées.",
-      "success"
-    );
-    notifyListeners();
-  }
-
-  void rejectKYC() {
-    kycStatus = "rejected";
-    addNotification(
-      "KYC Rejeté",
-      "La vérification de votre identité a échoué. Veuillez soumettre une pièce valide.",
-      "security"
-    );
-    notifyListeners();
-  }
-
-  void resetKYC() {
-    kycStatus = "none";
-    uploadedDocType = null;
-    uploadedDocName = null;
-    isFaceVerified = false;
-    notifyListeners();
-  }
-
-  // Notifications helper
-  void addNotification(String title, String content, String type) {
-    notifications.insert(
-      0,
-      NotificationModel(
-        id: "N-${DateTime.now().millisecondsSinceEpoch}",
-        title: title,
-        content: content,
-        type: type,
-        timestamp: DateTime.now(),
-      ),
-    );
-    notifyListeners();
-  }
-
-  void markAllNotificationsAsRead() {
-    for (var n in notifications) {
-      n.isRead = true;
-    }
-    notifyListeners();
-  }
-
-  void markNotificationRead(String id) {
-    final index = notifications.indexWhere((n) => n.id == id);
-    if (index != -1) {
-      notifications[index].isRead = true;
-      notifyListeners();
-    }
-  }
-
-  void toggleBiometrics() {
-    biometricsEnabled = !biometricsEnabled;
-    notifyListeners();
-  }
-
-  void toggle2FA() {
-    twoFactorEnabled = !twoFactorEnabled;
-    notifyListeners();
-  }
-
-  void removeDevice(String device) {
-    activeDevices.remove(device);
-    addNotification(
-      "Appareil révoqué",
-      "La session sur $device a été clôturée avec succès.",
-      "security"
-    );
-    notifyListeners();
-  }
-
-  void toggleTheme() {
+  Future<void> toggleTheme() async {
     _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    if (_user != null) {
+      _user = _user!.copyWith(themeMode: _themeMode == ThemeMode.dark ? 'dark' : 'light');
+      await _db.updateUser(_user!);
+    }
     notifyListeners();
   }
 
-  Future<void> addPairedDevice({required String peerId, required String alias}) async {
-    final exists = pairedDevices.any((d) => d['peerId'] == peerId);
-    if (!exists) {
-      pairedDevices.insert(0, {
-        'peerId': peerId,
-        'alias': alias,
-        'createdAt': DateTime.now().toIso8601String(),
-      });
-      await _localStorageService.savePairings(pairedDevices);
-      addNotification('Appareil appairé', 'Nouveau contact NFC enregistré: $alias', 'success');
-      notifyListeners();
-    }
+  // ── Refresh helpers ───────────────────────────────────────────────────────
+
+  Future<void> _refreshData() async {
+    if (_user == null) return;
+    walletSlots = await _db.getWalletSlots(userId);
+    transactions = await _db.getTransactions(userId);
+    offlineQueue = await _db.getOfflineQueue(userId);
+    notifications = await _db.getNotifications(userId);
+    sessions = await _db.getSessions(userId);
+    circles = await _db.getCircles(userId);
+    notifyListeners();
   }
 
-  Future<void> persistOfflineQueueSnapshot() async {
-    final data = offlineQueue
-        .map((tx) => tx.toMap())
-        .toList();
-    await _localStorageService.saveOfflineQueueBackup(data);
+  Future<void> _refreshNotifications() async {
+    if (_user == null) return;
+    notifications = await _db.getNotifications(userId);
+    notifyListeners();
   }
 }
