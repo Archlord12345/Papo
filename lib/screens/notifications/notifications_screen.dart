@@ -31,7 +31,7 @@ class NotificationsScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(LucideIcons.bellOff, size: 72, color: Colors.grey.withOpacity(0.4)),
+                  Icon(LucideIcons.bellOff, size: 72, color: Colors.grey.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
                   const Text('Aucune notification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 8),
@@ -73,23 +73,23 @@ class NotificationsScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: n.isRead
-                          ? (isDark ? AppColors.darkSurface.withOpacity(0.5) : Colors.white.withOpacity(0.6))
+                          ? (isDark ? AppColors.darkSurface.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.6))
                           : (isDark ? AppColors.darkSurface : Colors.white),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: n.isRead ? Colors.transparent : AppColors.primary.withOpacity(0.2),
+                        color: n.isRead ? Colors.transparent : AppColors.primary.withValues(alpha: 0.2),
                         width: 1,
                       ),
                       boxShadow: n.isRead
                           ? []
-                          : [BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+                          : [BoxShadow(color: AppColors.primary.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
                           child: Icon(icon, color: color, size: 18),
                         ),
                         const SizedBox(width: 14),

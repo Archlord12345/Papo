@@ -273,7 +273,7 @@ class _BroadcastView extends StatelessWidget {
                     width: 160 * (1 + pulseCtrl.value * 0.1),
                     height: 160 * (1 + pulseCtrl.value * 0.1),
                     decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.07),
+                      color: AppColors.warning.withValues(alpha: 0.07),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -281,7 +281,7 @@ class _BroadcastView extends StatelessWidget {
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.15),
+                      color: AppColors.warning.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                   ),

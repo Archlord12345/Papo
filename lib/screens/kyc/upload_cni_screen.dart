@@ -90,7 +90,7 @@ class UploadBox extends StatelessWidget {
           border: Border.all(
             color: selected.isNotEmpty
                 ? AppColors.success
-                : AppColors.primary.withOpacity(0.3),
+                : AppColors.primary.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),

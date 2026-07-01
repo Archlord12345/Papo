@@ -94,11 +94,11 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
                     color: _scanning
-                        ? AppColors.primary.withOpacity(0.15)
-                        : AppColors.primary.withOpacity(0.08),
+                        ? AppColors.primary.withValues(alpha: 0.15)
+                        : AppColors.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                     border: Border.all(
-                        color: AppColors.primary.withOpacity(0.3), width: 2),
+                        color: AppColors.primary.withValues(alpha: 0.3), width: 2),
                   ),
                   child: Icon(
                     LucideIcons.fingerprint,

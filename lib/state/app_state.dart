@@ -413,7 +413,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> markAllNotificationsAsRead() async {
     await _db.markAllNotificationsRead(userId);
-    for (final n in notifications) n.isRead = true;
+    for (final n in notifications) {
+      n.isRead = true;
+    }
     notifyListeners();
   }
 

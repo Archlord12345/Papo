@@ -161,8 +161,11 @@ class _SendBluetoothScreenState extends State<SendBluetoothScreen>
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowLeft),
           onPressed: () {
-            if (_mode == 'form') appState.popScreen();
-            else setState(() => _mode = 'form');
+            if (_mode == 'form') {
+              appState.popScreen();
+            } else {
+              setState(() => _mode = 'form');
+            }
           },
         ),
       ),
@@ -308,7 +311,7 @@ class _RadarView extends StatelessWidget {
               width: 200, height: 200,
               child: AnimatedBuilder(
                 animation: ctrl,
-                builder: (_, __) => CustomPaint(
+                builder: (_, _) => CustomPaint(
                   painter: _RadarPainter(ctrl.value),
                 ),
               ),

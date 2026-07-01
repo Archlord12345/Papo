@@ -27,7 +27,7 @@ class ActiveSessionsScreen extends StatelessWidget {
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isCurrent ? AppColors.primary.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                  color: isCurrent ? AppColors.primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(LucideIcons.smartphone, color: isCurrent ? AppColors.primary : Colors.grey, size: 20),
@@ -38,7 +38,7 @@ class ActiveSessionsScreen extends StatelessWidget {
                   if (isCurrent)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: AppColors.success.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                      decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                       child: const Text('ACTUEL', style: TextStyle(fontSize: 9, color: AppColors.success, fontWeight: FontWeight.bold)),
                     ),
                 ],

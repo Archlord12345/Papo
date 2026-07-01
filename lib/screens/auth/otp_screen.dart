@@ -119,7 +119,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   inactiveFillColor:
                       isDark ? AppColors.darkBg : AppColors.lightBg,
                   selectedFillColor:
-                      AppColors.primary.withOpacity(0.1),
+                      AppColors.primary.withValues(alpha: 0.1),
                   activeColor: AppColors.primary,
                   inactiveColor:
                       isDark ? AppColors.darkBorder : AppColors.lightBorder,

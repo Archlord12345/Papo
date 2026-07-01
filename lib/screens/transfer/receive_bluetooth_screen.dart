@@ -18,9 +18,9 @@ class ReceiveBluetoothScreen extends StatefulWidget {
 class _ReceiveBluetoothScreenState extends State<ReceiveBluetoothScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
-  bool _received = false;
-  double _amount = 0;
-  String _sender = '';
+  final bool _received = false;
+  final double _amount = 0;
+  final String _sender = '';
   String _asset = 'XOF';
   String _deviceName = 'Chargement...';
 

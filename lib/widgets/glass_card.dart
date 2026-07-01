@@ -31,19 +31,19 @@ class GlassCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius),
             border: Border.all(
               color: borderColor ?? (isDark 
-                  ? Colors.white.withOpacity(0.08) 
-                  : Colors.black.withOpacity(0.05)),
+                  ? Colors.white.withValues(alpha: 0.08) 
+                  : Colors.black.withValues(alpha: 0.05)),
               width: 1.0,
             ),
             gradient: LinearGradient(
               colors: gradientColors ?? (isDark 
                   ? [
-                      Colors.white.withOpacity(0.05),
-                      Colors.white.withOpacity(0.01),
+                      Colors.white.withValues(alpha: 0.05),
+                      Colors.white.withValues(alpha: 0.01),
                     ]
                   : [
-                      Colors.white.withOpacity(0.7),
-                      Colors.white.withOpacity(0.3),
+                      Colors.white.withValues(alpha: 0.7),
+                      Colors.white.withValues(alpha: 0.3),
                     ]),
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,

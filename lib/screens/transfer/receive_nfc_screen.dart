@@ -19,9 +19,9 @@ class ReceiveNfcScreen extends StatefulWidget {
 class _ReceiveNfcScreenState extends State<ReceiveNfcScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
-  bool _received = false;
-  double _amount = 0;
-  String _sender = '';
+  final bool _received = false;
+  final double _amount = 0;
+  final String _sender = '';
   String _asset = 'XOF';
 
   @override
@@ -175,8 +175,8 @@ class _WaitingView extends StatelessWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.secondary),
                 ),
-                const SizedBox(width: 12),
-                const Text('En attente du contact...', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600)),
+                SizedBox(width: 12),
+                Text('En attente du contact...', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600)),
               ],
             ),
             const SizedBox(height: 32),

@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 

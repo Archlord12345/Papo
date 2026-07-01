@@ -65,7 +65,7 @@ class MenuScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: AppColors.primary.withOpacity(0.2),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.2),
                     child: Text(appState.avatarInitials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 20)),
                   ),
                   const SizedBox(width: 14),
@@ -117,7 +117,7 @@ class MenuScreen extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: item.color.withOpacity(0.1), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: item.color.withValues(alpha: 0.1), shape: BoxShape.circle),
                           child: Icon(item.icon, color: item.color, size: 24),
                         ),
                         const SizedBox(height: 8),

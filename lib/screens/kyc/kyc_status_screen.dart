@@ -32,7 +32,7 @@ class KYCStatusScreen extends StatelessWidget {
     switch (appState.kycStatus) {
       case 'pending':
         return GlassCard(
-          borderColor: AppColors.warning.withOpacity(0.3),
+          borderColor: AppColors.warning.withValues(alpha: 0.3),
           child: _StatusContent(
             icon: LucideIcons.clock,
             color: AppColors.warning,
@@ -48,7 +48,7 @@ class KYCStatusScreen extends StatelessWidget {
         );
       case 'verified':
         return GlassCard(
-          borderColor: AppColors.success.withOpacity(0.3),
+          borderColor: AppColors.success.withValues(alpha: 0.3),
           child: _StatusContent(
             icon: LucideIcons.checkCircle,
             color: AppColors.success,
@@ -62,7 +62,7 @@ class KYCStatusScreen extends StatelessWidget {
         );
       case 'rejected':
         return GlassCard(
-          borderColor: AppColors.danger.withOpacity(0.3),
+          borderColor: AppColors.danger.withValues(alpha: 0.3),
           child: _StatusContent(
             icon: LucideIcons.xCircle,
             color: AppColors.danger,
@@ -155,12 +155,12 @@ class _StepRow extends StatelessWidget {
             Container(
               width: 24, height: 24,
               decoration: BoxDecoration(
-                color: step.done ? AppColors.success : Colors.grey.withOpacity(0.3),
+                color: step.done ? AppColors.success : Colors.grey.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
               child: Icon(step.done ? LucideIcons.check : LucideIcons.circle, size: 12, color: Colors.white),
             ),
-            if (!isLast) Container(width: 2, height: 32, color: step.done ? AppColors.success.withOpacity(0.3) : Colors.grey.withOpacity(0.2)),
+            if (!isLast) Container(width: 2, height: 32, color: step.done ? AppColors.success.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2)),
           ],
         ),
         const SizedBox(width: 12),

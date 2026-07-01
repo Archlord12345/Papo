@@ -67,7 +67,7 @@ class CircleScreen extends StatelessWidget {
               CustomInput(label: 'Cotisation par membre (XOF)', hint: '100000', controller: contribCtrl, keyboardType: TextInputType.number),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: freq,
+                initialValue: freq,
                 decoration: const InputDecoration(labelText: 'Fréquence'),
                 items: const [
                   DropdownMenuItem(value: 'weekly', child: Text('Hebdomadaire')),

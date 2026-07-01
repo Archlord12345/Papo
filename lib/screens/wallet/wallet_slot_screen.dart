@@ -4,8 +4,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../models/wallet_slot_model.dart';
-import '../../widgets/custom_button.dart';
-import '../../utils/formatters.dart';
 
 class WalletSlotScreen extends StatelessWidget {
   const WalletSlotScreen({super.key});

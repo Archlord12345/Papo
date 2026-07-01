@@ -84,7 +84,7 @@ class ScreenExplorer extends StatelessWidget {
                   Image.asset(
                     'assets/papo_logo.png',
                     height: 32,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(
                         color: AppColors.primary,
@@ -161,7 +161,7 @@ class ScreenExplorer extends StatelessWidget {
                             style: TextStyle(fontSize: 10, color: isDark ? AppColors.textDarkSecondary : AppColors.textLightSecondary),
                           ),
                           selected: isSelected,
-                          selectedTileColor: AppColors.primary.withOpacity(0.08),
+                          selectedTileColor: AppColors.primary.withValues(alpha: 0.08),
                           onTap: () {
                             appState.setScreen(screen["name"]);
                             Navigator.pop(context); // Close drawer

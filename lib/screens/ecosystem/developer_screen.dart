@@ -53,7 +53,7 @@ class _DeveloperScreenState extends State<DeveloperScreen> {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _sandbox ? AppColors.warning.withOpacity(0.3) : AppColors.success.withOpacity(0.3)),
+                border: Border.all(color: _sandbox ? AppColors.warning.withValues(alpha: 0.3) : AppColors.success.withValues(alpha: 0.3)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -67,7 +67,7 @@ class _DeveloperScreenState extends State<DeveloperScreen> {
                           style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     ],
                   ),
-                  Switch(value: !_sandbox, onChanged: (v) => setState(() => _sandbox = !v), activeColor: AppColors.success),
+                  Switch(value: !_sandbox, onChanged: (v) => setState(() => _sandbox = !v), activeThumbColor: AppColors.success),
                 ],
               ),
             ),
@@ -178,7 +178,7 @@ class _EndpointCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: methodColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(color: methodColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
             child: Text(method, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: methodColor)),
           ),
           const SizedBox(width: 12),

@@ -91,7 +91,7 @@ class PaypointApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<AppState>(
-      builder: (_, appState, __) => MaterialApp(
+      builder: (_, appState, _) => MaterialApp(
         title: 'PAYPOINT (PAPO)',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,

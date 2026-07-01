@@ -36,13 +36,13 @@ class _SyncScreenState extends State<SyncScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: appState.offlineQueue.isEmpty
-                    ? AppColors.success.withOpacity(0.1)
-                    : AppColors.warning.withOpacity(0.1),
+                    ? AppColors.success.withValues(alpha: 0.1)
+                    : AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: appState.offlineQueue.isEmpty
-                      ? AppColors.success.withOpacity(0.3)
-                      : AppColors.warning.withOpacity(0.3),
+                      ? AppColors.success.withValues(alpha: 0.3)
+                      : AppColors.warning.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -130,7 +130,7 @@ class _SyncScreenState extends State<SyncScreen> {
                             leading: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: AppColors.warning.withOpacity(0.1),
+                                color: AppColors.warning.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(LucideIcons.wifiOff,

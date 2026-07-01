@@ -35,7 +35,7 @@ class MerchantDashboardScreen extends StatelessWidget {
           children: [
             // Balance card
             GlassCard(
-              borderColor: AppColors.secondary.withOpacity(0.3),
+              borderColor: AppColors.secondary.withValues(alpha: 0.3),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -99,7 +99,7 @@ class MerchantDashboardScreen extends StatelessWidget {
                     color: AppColors.secondary,
                     barWidth: 3,
                     dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: true, color: AppColors.secondary.withOpacity(0.1)),
+                    belowBarData: BarAreaData(show: true, color: AppColors.secondary.withValues(alpha: 0.1)),
                   ),
                 ],
               )),
@@ -143,7 +143,7 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.3))),
       child: Row(
         children: [
           Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),

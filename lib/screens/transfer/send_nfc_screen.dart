@@ -198,8 +198,11 @@ class _SendNfcScreenState extends State<SendNfcScreen>
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowLeft),
           onPressed: () {
-            if (_mode == 'form') appState.popScreen();
-            else setState(() => _mode = 'form');
+            if (_mode == 'form') {
+              appState.popScreen();
+            } else {
+              setState(() => _mode = 'form');
+            }
           },
         ),
       ),
@@ -353,13 +356,13 @@ class _DetectingView extends StatelessWidget {
           children: [
             AnimatedBuilder(
               animation: pulse,
-              builder: (_, __) => Stack(
+              builder: (_, _) => Stack(
                 alignment: Alignment.center,
                 children: [
                   // Outer wave
                   AnimatedBuilder(
                     animation: wave,
-                    builder: (_, __) => Container(
+                    builder: (_, _) => Container(
                       width: 180 + wave.value * 40,
                       height: 180 + wave.value * 40,
                       decoration: BoxDecoration(
