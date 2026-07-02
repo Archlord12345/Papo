@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -13,6 +14,20 @@ class UploadPassportScreen extends StatefulWidget {
 
 class _UploadPassportScreenState extends State<UploadPassportScreen> {
   String _file = '';
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (image != null) {
+        setState(() {
+          _file = image.path;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +53,7 @@ class _UploadPassportScreenState extends State<UploadPassportScreen> {
             UploadBox(
               title: 'Page d\'informations du Passeport',
               selected: _file,
-              onTap: () => setState(() => _file = 'Passport_Page.jpg'),
+              onTap: _pickImage,
             ),
             const SizedBox(height: 32),
             CustomButton(
@@ -52,7 +67,7 @@ class _UploadPassportScreenState extends State<UploadPassportScreen> {
                   );
                   return;
                 }
-                appState.uploadKYCDocument('Passeport', 'Passport_Document.pdf');
+                appState.uploadKYCDocument('Passeport', _file);
                 appState.setScreen('FaceVerification');
               },
             ),

@@ -14,9 +14,30 @@ class CreateWalletScreen extends StatefulWidget {
 
 class _CreateWalletScreenState extends State<CreateWalletScreen> {
   final _nameCtrl = TextEditingController();
-  String? _selectedDevice;
-  String _selectedAsset = 'XOF';
+  String _selectedAsset = 'PAPO';
   bool _loading = false;
+  List<dynamic> _availableAssets = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssets();
+  }
+
+  Future<void> _loadAssets() async {
+    final appState = Provider.of<AppState>(context, listen: false);
+    try {
+      final assets = await appState.getAvailableAssets();
+      setState(() {
+        _availableAssets = assets;
+        if (_availableAssets.isNotEmpty) {
+          _selectedAsset = _availableAssets.first['code'];
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading assets: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -35,7 +56,7 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Créer un Wallet'),
+        title: const Text('Nouveau Portefeuille'),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -58,10 +79,10 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('SLOT', style: TextStyle(color: Colors.white60, fontSize: 11, letterSpacing: 1.5)),
+                  const Text('SLOT DE STOCKAGE', style: TextStyle(color: Colors.white60, fontSize: 11, letterSpacing: 1.5)),
                   Text('#$nextSlot', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32)),
                   const SizedBox(height: 8),
-                  const Text('ID Wallet (aperçu)', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                  const Text('ADRESSE BLOCKCHAIN', style: TextStyle(color: Colors.white60, fontSize: 11)),
                   Text(previewId,
                       style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
                       overflow: TextOverflow.ellipsis),
@@ -72,73 +93,47 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
 
             // Wallet name
             CustomInput(
-              label: 'Nom du wallet',
-              hint: 'ex: Wallet Famille, Épargne BTC...',
-              prefixIcon: LucideIcons.tag,
+              label: 'Libellé du portefeuille',
+              hint: 'ex: Compte Courant, Épargne...',
+              prefixIcon: LucideIcons.wallet,
               controller: _nameCtrl,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
             // Asset selection
-            const Text('Devise du solde', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 10),
-            Row(
-              children: ['XOF', 'USD', 'PAPO', 'BTC'].map((asset) {
-                final isSelected = _selectedAsset == asset;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedAsset = asset),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : (isDark ? AppColors.darkSurface : Colors.white),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: isSelected ? AppColors.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-                      ),
-                      child: Center(
-                        child: Text(
-                          asset,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // Device selection
-            const Text('Appareil associé', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const Text('Choisir la Monnaie (Asset)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 4),
-            const Text('Choisissez l\'appareil physique de ce wallet.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 12),
+            Text(
+              'Toutes les transactions seront converties via le pivot PAPO.',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
 
-            if (appState.deviceCatalog.isEmpty)
+            if (_availableAssets.isEmpty)
               const Center(child: CircularProgressIndicator())
             else
-              ListView.builder(
+              GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: appState.deviceCatalog.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 2.5,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _availableAssets.length,
                 itemBuilder: (ctx, i) {
-                  final device = appState.deviceCatalog[i];
-                  final name = device['name'] as String;
-                  final isSelected = _selectedDevice == name;
+                  final asset = _availableAssets[i];
+                  final code = asset['code'] as String;
+                  final name = asset['name'] as String;
+                  final isSelected = _selectedAsset == code;
+
                   return GestureDetector(
-                    onTap: () => setState(() => _selectedDevice = name),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    onTap: () => setState(() => _selectedAsset = code),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primary.withValues(alpha: 0.1)
-                            : (isDark ? AppColors.darkSurface : Colors.white),
+                        color: isSelected ? AppColors.primary : (isDark ? AppColors.darkSurface : Colors.white),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected ? AppColors.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
@@ -147,23 +142,43 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            LucideIcons.smartphone,
-                            color: isSelected ? AppColors.primary : Colors.grey,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: isSelected ? Colors.white24 : AppColors.primary.withOpacity(0.1),
                             child: Text(
-                              name,
+                              code[0],
                               style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? AppColors.primary : null,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? Colors.white : AppColors.primary,
                               ),
                             ),
                           ),
-                          if (isSelected)
-                            const Icon(LucideIcons.circleCheck, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  code,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: isSelected ? Colors.white : null,
+                                  ),
+                                ),
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isSelected ? Colors.white70 : Colors.grey,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -171,37 +186,34 @@ class _CreateWalletScreenState extends State<CreateWalletScreen> {
                 },
               ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 48),
             CustomButton(
-              text: 'Créer le Wallet',
+              text: 'Confirmer la création',
               isLoading: _loading,
-              icon: const Icon(LucideIcons.plusCircle, color: Colors.white, size: 18),
+              icon: const Icon(LucideIcons.checkCircle2, color: Colors.white, size: 18),
               onPressed: () async {
                 if (_nameCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Veuillez saisir un nom'), backgroundColor: AppColors.danger),
+                    const SnackBar(content: Text('Veuillez donner un nom à ce portefeuille'), backgroundColor: AppColors.danger),
                   );
                   return;
                 }
-                if (_selectedDevice == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Veuillez sélectionner un appareil'), backgroundColor: AppColors.danger),
-                  );
-                  return;
-                }
+
                 setState(() => _loading = true);
+                // deviceName is now passed as a placeholder or handled internally
                 final error = await appState.createWalletSlot(
                   name: _nameCtrl.text.trim(),
-                  deviceName: _selectedDevice!,
+                  deviceName: 'Mobile App', // Placeholder since it's no longer chosen
                   asset: _selectedAsset,
                 );
+
                 if (mounted) {
                   setState(() => _loading = false);
                   if (error != null) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.danger));
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Wallet créé avec succès !'), backgroundColor: AppColors.success),
+                      const SnackBar(content: Text('Portefeuille créé avec succès !'), backgroundColor: AppColors.success),
                     );
                     appState.popScreen();
                   }

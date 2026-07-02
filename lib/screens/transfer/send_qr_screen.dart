@@ -146,24 +146,54 @@ class _ScanView extends StatelessWidget {
   Widget build(BuildContext context) {
     return QrScannerWidget(
       onDetect: (data) {
-        // Handle Papo QR format: papo:pay/WALLET_ID?asset=XOF&amount=100
         String recipient = data;
         String? qrAsset;
         String? qrAmount;
-        if (data.startsWith('papo:pay/')) {
-          final uri = Uri.tryParse(data.replaceFirst('papo:pay/', 'papo://pay/'));
-          if (uri != null) {
-            recipient = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : data;
-            qrAmount = uri.queryParameters['amount'];
-            qrAsset = uri.queryParameters['asset'];
+
+        try {
+          // Format 1 — Paiement standard : papo:pay/WALLET_ID?asset=XOF&amount=100
+          if (data.startsWith('papo:pay/')) {
+            final withScheme = data.replaceFirst('papo:pay/', 'https://pay/');
+            final uri = Uri.tryParse(withScheme);
+            if (uri != null) {
+              recipient = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : data;
+              qrAmount = uri.queryParameters['amount'];
+              qrAsset = uri.queryParameters['asset'];
+            }
           }
+          // Format 2 — QR Marchand : papo:merchant?walletId=...&name=...&phone=...
+          else if (data.startsWith('papo:merchant')) {
+            final withScheme = data.replaceFirst('papo:', 'https://');
+            final uri = Uri.tryParse(withScheme);
+            if (uri != null) {
+              recipient = uri.queryParameters['phone'] ??
+                  uri.queryParameters['walletId'] ??
+                  data;
+              // Use walletId as the recipient if phone is missing
+              if (uri.queryParameters['walletId'] != null) {
+                recipient = uri.queryParameters['walletId']!;
+              }
+              qrAsset = uri.queryParameters['asset'];
+              qrAmount = uri.queryParameters['amount'];
+            }
+          }
+          // Format 3 — Cercle membre : papo:user|NAME|PHONE|WALLET_ID
+          else if (data.startsWith('papo:user|')) {
+            final parts = data.replaceFirst('papo:user|', '').split('|');
+            if (parts.length >= 2) {
+              recipient = parts.length >= 3 ? parts[2] : parts[1]; // walletId ou phone
+            }
+          }
+        } catch (_) {
+          // Fallback: utilise data brute comme destinataire
+          recipient = data;
         }
 
         final activeAsset = context.read<AppState>().activeSlot?.asset ?? 'XOF';
-        if (qrAsset != null && qrAsset != activeAsset) {
+        if (qrAsset != null && qrAsset != activeAsset && qrAsset.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Incompatibilité : Ce QR demande du $qrAsset mais votre wallet est en $activeAsset'),
+              content: Text('Ce QR demande du $qrAsset mais votre wallet est en $activeAsset'),
               backgroundColor: AppColors.danger,
             ),
           );

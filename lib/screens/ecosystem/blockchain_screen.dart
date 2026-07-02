@@ -14,46 +14,81 @@ class BlockchainScreen extends StatelessWidget {
     final appState = context.watch<AppState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Build block data from real transactions
-    final blocks = appState.transactions.take(10).toList();
+    // Blocs depuis les vraies transactions
+    final txs = appState.transactions;
+    final baseBlock = 349000;
+    final totalBlocks = baseBlock + txs.length;
+    final confirmedCount = txs.where((t) => t.status == 'completed').length;
+    final pendingCount = txs.where((t) => t.status == 'pending').length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Explorateur de Blocs'), backgroundColor: Colors.transparent, elevation: 0),
-      body: Column(
-        children: [
-          // Chain stats
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: isDark ? AppColors.darkSurface : Colors.white,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _Stat('Blocs', '#${(349000 + appState.transactions.length).toString()}'),
-                _Stat('Nœuds', '12 actifs'),
-                _Stat('Tx totales', appState.transactions.length.toString()),
-                _Stat('TPS', '145'),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: blocks.isEmpty
-                ? const Center(child: Text('Aucune transaction enregistrée'))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: blocks.length,
-                    itemBuilder: (ctx, i) {
-                      final tx = blocks[i];
-                      final blockNum = 349000 + appState.transactions.length - i;
-                      return _BlockCard(
-                        blockNum: blockNum,
-                        tx: tx,
-                        isDark: isDark,
-                      );
-                    },
-                  ),
+      appBar: AppBar(
+        title: const Text('Explorateur de Blocs'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.refreshCw),
+            onPressed: () => appState.refreshFromBackend(),
           ),
         ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => appState.refreshFromBackend(),
+        color: AppColors.primary,
+        child: Column(
+          children: [
+            // ── Stats de la chaîne ────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              color: isDark ? AppColors.darkSurface : Colors.white,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _Stat('Dernier bloc', '#$totalBlocks'),
+                  _Stat('Tx confirmées', '$confirmedCount'),
+                  _Stat('En attente', '$pendingCount'),
+                  _Stat('Tx totales', '${txs.length}'),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // ── Liste des blocs ───────────────────────────────────────────
+            Expanded(
+              child: txs.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(LucideIcons.blocks, size: 64, color: Colors.grey.withValues(alpha: 0.4)),
+                          const SizedBox(height: 16),
+                          const Text('Aucune transaction enregistrée',
+                              style: TextStyle(color: Colors.grey)),
+                          const SizedBox(height: 8),
+                          const Text('Effectuez votre première transaction pour voir la chaîne.',
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                              textAlign: TextAlign.center),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: txs.length,
+                      itemBuilder: (ctx, i) {
+                        final tx = txs[i];
+                        final blockNum = totalBlocks - i;
+                        return _BlockCard(
+                          blockNum: blockNum,
+                          tx: tx,
+                          isDark: isDark,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -63,11 +98,14 @@ class _Stat extends StatelessWidget {
   final String label;
   final String value;
   const _Stat(this.label, this.value);
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(value,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 2),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
       ],
     );
@@ -76,14 +114,25 @@ class _Stat extends StatelessWidget {
 
 class _BlockCard extends StatelessWidget {
   final int blockNum;
-  final tx;
+  final dynamic tx;
   final bool isDark;
-  const _BlockCard({required this.blockNum, required this.tx, required this.isDark});
+  const _BlockCard({
+    required this.blockNum,
+    required this.tx,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Simulate block hash from tx id
-    final hash = '0x${tx.id.replaceAll('-', '').substring(0, 16)}...';
+    // Hash simulé depuis l'ID de la transaction
+    final rawId = tx.id.toString().replaceAll('-', '');
+    final hashPreview = '0x${rawId.substring(0, rawId.length >= 16 ? 16 : rawId.length)}…';
+    final isPositive = (tx.amount as num) > 0;
+    final statusColor = tx.status == 'completed'
+        ? AppColors.success
+        : tx.status == 'pending'
+            ? AppColors.warning
+            : AppColors.danger;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -91,7 +140,8 @@ class _BlockCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,47 +151,104 @@ class _BlockCard extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text('Bloc #$blockNum', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12)),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Bloc #$blockNum',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                        fontSize: 12)),
               ),
-              Text(timeAgo(tx.createdAt), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              Text(timeAgo(tx.createdAt.toString()),
+                  style: const TextStyle(color: Colors.grey, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
+
+          // Hash
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: tx.id.toString()));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Hash copié'),
+                  duration: Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: Row(children: [
               const Icon(LucideIcons.link, size: 13, color: Colors.grey),
               const SizedBox(width: 6),
               Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: tx.id));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Hash copié'), duration: Duration(seconds: 1)));
-                  },
-                  child: Text(hash, style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: AppColors.secondary), overflow: TextOverflow.ellipsis),
+                child: Text(
+                  hashPreview,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: AppColors.secondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(LucideIcons.copy, size: 12, color: Colors.grey),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  '${tx.type.toString().toUpperCase()} — ${tx.asset ?? 'XOF'}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                formatAmountAbs(
+                    (tx.amount as num).toDouble(), tx.asset?.toString() ?? 'XOF'),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: isPositive ? AppColors.success : AppColors.danger,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('${tx.type.toUpperCase()} — ${tx.asset}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              Text(
-                formatAmountAbs(tx.amount, tx.asset),
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: tx.amount > 0 ? AppColors.success : AppColors.danger),
+          const SizedBox(height: 6),
+
+          Row(children: [
+            Icon(
+              tx.status == 'completed'
+                  ? LucideIcons.checkCircle
+                  : tx.status == 'pending'
+                      ? LucideIcons.clock
+                      : LucideIcons.xCircle,
+              size: 13,
+              color: statusColor,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              tx.status.toString().toUpperCase(),
+              style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w600),
+            ),
+            if (tx.recipient?.toString().isNotEmpty == true) ...[
+              const SizedBox(width: 8),
+              const Icon(LucideIcons.arrowRight, size: 11, color: Colors.grey),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  tx.recipient.toString(),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(LucideIcons.checkCircle, size: 13, color: AppColors.success),
-              const SizedBox(width: 4),
-              Text('Confirmé — statut: ${tx.status}', style: const TextStyle(fontSize: 11, color: AppColors.success)),
-            ],
-          ),
+          ]),
         ],
       ),
     );

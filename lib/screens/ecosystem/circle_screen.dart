@@ -184,11 +184,18 @@ class _CircleCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const Text('Membres', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              TextButton.icon(
-                icon: const Icon(LucideIcons.qrCode, size: 14),
-                label: const Text('Scanner QR', style: TextStyle(fontSize: 12)),
-                onPressed: () => _showScanMemberQr(context, appState, circle),
-              ),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                TextButton.icon(
+                  icon: const Icon(LucideIcons.qrCode, size: 14),
+                  label: const Text('Mon QR', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _showMyQr(context, appState),
+                ),
+                TextButton.icon(
+                  icon: const Icon(LucideIcons.scanLine, size: 14),
+                  label: const Text('Scanner', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _showScanMemberQr(context, appState, circle),
+                ),
+              ]),
             ]),
           ),
           ListView.builder(
@@ -316,6 +323,52 @@ class _CircleCard extends StatelessWidget {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _QrScanMemberSheet(circle: circle, appState: appState),
+    );
+  }
+
+  void _showMyQr(BuildContext context, AppState appState) {
+    // Format : papo:user|NAME|PHONE|WALLET_ID
+    final qrData = 'papo:user|${appState.userName}|${appState.userPhone}|${appState.activeWalletId}';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        expand: false,
+        builder: (_, ctrl) => ListView(
+          controller: ctrl,
+          padding: const EdgeInsets.all(24),
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            const Text('Mon QR de membre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18), textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            const Text('Montrez ce QR pour rejoindre un cercle', style: TextStyle(color: Colors.grey, fontSize: 13), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 24)],
+                ),
+                child: Column(children: [
+                  QrImageView(data: qrData, version: QrVersions.auto, size: 200),
+                  const SizedBox(height: 10),
+                  Text(appState.userName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                  Text(appState.userPhone, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  Text(appState.activeWalletId,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 9, color: Colors.blueGrey),
+                      overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -473,21 +526,33 @@ class _QrScanMemberSheetState extends State<_QrScanMemberSheet> with SingleTicke
                 borderRadius: BorderRadius.circular(20),
                 child: QrScannerWidget(
                   onDetect: (data) {
-                    // Expecting format like "papo:user/Name/Phone/WalletId" or similar
-                    // For now, let's assume it's a JSON or a simple formatted string
-                    // If it's just a wallet ID, we'd need to fetch user info.
-                    // Let's assume the QR contains "name|phone|walletId" for this demo/simulation replacement
-                    final parts = data.split('|');
+                    String name = 'Utilisateur';
+                    String phone = '';
+                    String walletId = data;
+
+                    // Format standardisé : papo:user|NAME|PHONE|WALLET_ID
+                    if (data.startsWith('papo:user|')) {
+                      final parts = data.replaceFirst('papo:user|', '').split('|');
+                      if (parts.length >= 1) name = parts[0];
+                      if (parts.length >= 2) phone = parts[1];
+                      if (parts.length >= 3) walletId = parts[2];
+                    }
+                    // Format marchand : papo:merchant?...
+                    else if (data.startsWith('papo:merchant')) {
+                      try {
+                        final uri = Uri.tryParse(data.replaceFirst('papo:', 'https://'));
+                        if (uri != null) {
+                          name = uri.queryParameters['name'] ?? 'Marchand';
+                          phone = uri.queryParameters['phone'] ?? '';
+                          walletId = uri.queryParameters['walletId'] ?? data;
+                        }
+                      } catch (_) {}
+                    }
+
                     setState(() {
-                      if (parts.length >= 3) {
-                        _scannedName = parts[0];
-                        _scannedPhone = parts[1];
-                        _scannedWalletId = parts[2];
-                      } else {
-                        _scannedName = 'Utilisateur QR';
-                        _scannedPhone = '';
-                        _scannedWalletId = data;
-                      }
+                      _scannedName = name;
+                      _scannedPhone = phone;
+                      _scannedWalletId = walletId;
                       _scanned = true;
                     });
                   },

@@ -190,11 +190,9 @@ class _SyncScreenState extends State<SyncScreen> {
                       color: Colors.white, size: 18),
                   onPressed: () async {
                     setState(() => _syncing = true);
-                    await Future.delayed(const Duration(seconds: 2));
-                    if (mounted) {
-                      await appState.syncOfflineTransactions();
-                      setState(() => _syncing = false);
-                    }
+                    // Appel réel au backend
+                    await appState.syncOfflineTransactions();
+                    if (mounted) setState(() => _syncing = false);
                   },
                 ),
               const SizedBox(height: 16),

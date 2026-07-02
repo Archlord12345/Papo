@@ -74,12 +74,13 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  final appState = AppState();
-  await appState.init();
-
   runApp(
-    ChangeNotifierProvider.value(
-      value: appState,
+    ChangeNotifierProvider(
+      create: (context) {
+        final appState = AppState();
+        appState.init();
+        return appState;
+      },
       child: const PaypointApp(),
     ),
   );

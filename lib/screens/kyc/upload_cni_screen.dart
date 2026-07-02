@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/custom_button.dart';
@@ -14,6 +15,24 @@ class UploadCNIScreen extends StatefulWidget {
 class _UploadCNIScreenState extends State<UploadCNIScreen> {
   String _recto = '';
   String _verso = '';
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage(bool isRecto) async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (image != null) {
+        setState(() {
+          if (isRecto) {
+            _recto = image.path;
+          } else {
+            _verso = image.path;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,13 +58,13 @@ class _UploadCNIScreenState extends State<UploadCNIScreen> {
             UploadBox(
               title: 'Recto de la CNI',
               selected: _recto,
-              onTap: () => setState(() => _recto = 'CNI_Recto.jpg'),
+              onTap: () => _pickImage(true),
             ),
             const SizedBox(height: 16),
             UploadBox(
               title: 'Verso de la CNI',
               selected: _verso,
-              onTap: () => setState(() => _verso = 'CNI_Verso.jpg'),
+              onTap: () => _pickImage(false),
             ),
             const SizedBox(height: 32),
             CustomButton(
@@ -59,7 +78,7 @@ class _UploadCNIScreenState extends State<UploadCNIScreen> {
                   );
                   return;
                 }
-                appState.uploadKYCDocument('CNI', 'CNI_Document.pdf');
+                appState.uploadKYCDocument('CNI', _recto, secondFilePath: _verso);
                 appState.setScreen('FaceVerification');
               },
             ),
@@ -108,7 +127,7 @@ class UploadBox extends StatelessWidget {
                     fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 4),
             Text(
-              selected.isNotEmpty ? selected : 'Appuyez pour sélectionner',
+              selected.isNotEmpty ? selected.split('/').last : 'Appuyez pour sélectionner',
               style: TextStyle(
                   color: selected.isNotEmpty ? AppColors.success : Colors.grey,
                   fontSize: 12),

@@ -6,7 +6,9 @@ class UserModel {
   final String blockchainAddr; // base address (without slot)
   final String initials;
   final bool isMerchant;
-  final String kycStatus;
+  final bool isAgent;
+  final bool isAdmin;
+  final String kycStatus;   // lowercase: none | pending | approved | rejected
   final bool faceVerified;
   final String? kycDocType;
   final String? kycDocName;
@@ -24,6 +26,8 @@ class UserModel {
     required this.blockchainAddr,
     required this.initials,
     this.isMerchant = false,
+    this.isAgent = false,
+    this.isAdmin = false,
     this.kycStatus = 'none',
     this.faceVerified = false,
     this.kycDocType,
@@ -43,6 +47,8 @@ class UserModel {
     'blockchain_addr': blockchainAddr,
     'initials': initials,
     'is_merchant': isMerchant ? 1 : 0,
+    'is_agent': isAgent ? 1 : 0,
+    'is_admin': isAdmin ? 1 : 0,
     'kyc_status': kycStatus,
     'face_verified': faceVerified ? 1 : 0,
     'kyc_doc_type': kycDocType,
@@ -56,13 +62,15 @@ class UserModel {
 
   factory UserModel.fromMap(Map<String, dynamic> m) => UserModel(
     id: m['id'] as int?,
-    name: m['name'] as String,
-    phone: m['phone'] as String,
-    pinHash: m['pin_hash'] as String,
-    blockchainAddr: m['blockchain_addr'] as String,
+    name: m['name'] as String? ?? 'Utilisateur',
+    phone: m['phone'] as String? ?? '',
+    pinHash: m['pin_hash'] as String? ?? '',
+    blockchainAddr: m['blockchain_addr'] as String? ?? '',
     initials: m['initials'] as String? ?? '',
     isMerchant: (m['is_merchant'] as int? ?? 0) == 1,
-    kycStatus: m['kyc_status'] as String? ?? 'none',
+    isAgent: (m['is_agent'] as int? ?? 0) == 1,
+    isAdmin: (m['is_admin'] as int? ?? 0) == 1,
+    kycStatus: (m['kyc_status'] as String? ?? 'none').toLowerCase(),
     faceVerified: (m['face_verified'] as int? ?? 0) == 1,
     kycDocType: m['kyc_doc_type'] as String?,
     kycDocName: m['kyc_doc_name'] as String?,
@@ -70,7 +78,28 @@ class UserModel {
     twoFactorEnabled: (m['two_factor_enabled'] as int? ?? 0) == 1,
     language: m['language'] as String? ?? 'fr',
     themeMode: m['theme_mode'] as String? ?? 'dark',
-    createdAt: m['created_at'] as String,
+    createdAt: m['created_at'] as String? ?? DateTime.now().toIso8601String(),
+  );
+
+  factory UserModel.fromJson(Map<String, dynamic> m) => UserModel(
+    id: m['id'] as int?,
+    name: m['name'] as String? ?? 'Utilisateur',
+    phone: m['phone'] as String? ?? '',
+    pinHash: m['pinHash'] as String? ?? '',
+    blockchainAddr: m['blockchainAddr'] as String? ?? '',
+    initials: m['initials'] as String? ?? '',
+    isMerchant: m['isMerchant'] as bool? ?? false,
+    isAgent: m['isAgent'] as bool? ?? false,
+    isAdmin: m['isAdmin'] as bool? ?? false,
+    kycStatus: (m['kycStatus'] as String? ?? 'none').toLowerCase(),
+    faceVerified: m['faceVerified'] as bool? ?? false,
+    kycDocType: m['kycDocType'] as String?,
+    kycDocName: m['kycDocName'] as String?,
+    biometricsEnabled: m['biometricsEnabled'] as bool? ?? true,
+    twoFactorEnabled: m['twoFactorEnabled'] as bool? ?? false,
+    language: m['language'] as String? ?? 'fr',
+    themeMode: m['themeMode'] as String? ?? 'dark',
+    createdAt: m['createdAt'] as String? ?? DateTime.now().toIso8601String(),
   );
 
   UserModel copyWith({
@@ -81,6 +110,8 @@ class UserModel {
     String? blockchainAddr,
     String? initials,
     bool? isMerchant,
+    bool? isAgent,
+    bool? isAdmin,
     String? kycStatus,
     bool? faceVerified,
     String? kycDocType,
@@ -99,6 +130,8 @@ class UserModel {
       blockchainAddr: blockchainAddr ?? this.blockchainAddr,
       initials: initials ?? this.initials,
       isMerchant: isMerchant ?? this.isMerchant,
+      isAgent: isAgent ?? this.isAgent,
+      isAdmin: isAdmin ?? this.isAdmin,
       kycStatus: kycStatus ?? this.kycStatus,
       faceVerified: faceVerified ?? this.faceVerified,
       kycDocType: kycDocType ?? this.kycDocType,

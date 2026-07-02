@@ -46,18 +46,34 @@ class TransactionModel {
 
   factory TransactionModel.fromMap(Map<String, dynamic> m) => TransactionModel(
     id: m['id'] as String,
-    userId: m['user_id'] as int,
+    userId: m['user_id'] as int? ?? 0,
     slotId: m['slot_id'] as int? ?? 0,
-    title: m['title'] as String,
-    amount: (m['amount'] as num).toDouble(),
+    title: m['title'] as String? ?? 'Transaction',
+    amount: (m['amount'] as num?)?.toDouble() ?? 0.0,
     asset: 'XOF',
-    type: m['type'] as String,
-    status: m['status'] as String? ?? 'completed',
+    type: m['type'] as String? ?? 'TRANSFER',
+    status: m['status'] as String? ?? 'COMPLETED',
     description: m['description'] as String? ?? '',
     recipient: m['recipient'] as String? ?? '',
-    method: m['method'] as String? ?? 'standard',
+    method: m['method'] as String? ?? 'STANDARD',
     isOffline: (m['is_offline'] as int? ?? 0) == 1,
-    createdAt: m['created_at'] as String,
+    createdAt: m['created_at'] as String? ?? DateTime.now().toIso8601String(),
+  );
+
+  factory TransactionModel.fromJson(Map<String, dynamic> m) => TransactionModel(
+    id: m['id'] as String,
+    userId: m['userId'] as int? ?? 0,
+    slotId: m['walletId'] as int? ?? 0,
+    title: m['title'] as String? ?? 'Transaction',
+    amount: (m['amount'] as num?)?.toDouble() ?? 0.0,
+    asset: m['currency'] as String? ?? 'XOF',
+    type: m['type'] as String? ?? 'TRANSFER',
+    status: m['status'] as String? ?? 'COMPLETED',
+    description: m['description'] as String? ?? '',
+    recipient: m['recipientPhone'] as String? ?? '',
+    method: m['method'] as String? ?? 'STANDARD',
+    isOffline: m['isOffline'] as bool? ?? false,
+    createdAt: m['createdAt'] as String? ?? DateTime.now().toIso8601String(),
   );
 
   DateTime get timestamp => DateTime.parse(createdAt);

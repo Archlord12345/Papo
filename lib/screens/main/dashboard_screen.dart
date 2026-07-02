@@ -19,6 +19,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _hideBalance = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AppState>().refreshFromBackend();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -97,7 +107,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       bottomNavigationBar: const AppBottomNav(currentIndex: 0),
       body: RefreshIndicator(
-        onRefresh: () async => setState(() {}),
+        onRefresh: () => context.read<AppState>().refreshFromBackend(),
         color: AppColors.primary,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

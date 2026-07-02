@@ -15,12 +15,28 @@ class DatabaseHelper {
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'papo_wallet_v4.db');
-    return openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE wallet_slots ADD COLUMN asset TEXT NOT NULL DEFAULT "XOF"');
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN is_agent INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE wallet_slots ADD COLUMN remote_id INTEGER');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN wallet_uuid TEXT');
+      } catch (_) {}
     }
   }
 
@@ -32,9 +48,11 @@ class DatabaseHelper {
         name               TEXT    NOT NULL,
         phone              TEXT    NOT NULL UNIQUE,
         pin_hash           TEXT    NOT NULL,
-        blockchain_addr    TEXT    NOT NULL,
+        blockchain_addr    TEXT    NOT NULL DEFAULT '',
         initials           TEXT    NOT NULL DEFAULT '',
         is_merchant        INTEGER NOT NULL DEFAULT 0,
+        is_agent           INTEGER NOT NULL DEFAULT 0,
+        is_admin           INTEGER NOT NULL DEFAULT 0,
         kyc_status         TEXT    NOT NULL DEFAULT 'none',
         face_verified      INTEGER NOT NULL DEFAULT 0,
         kyc_doc_type       TEXT,
@@ -48,10 +66,10 @@ class DatabaseHelper {
     ''');
 
     // ── WALLET SLOTS ──────────────────────────────────────────────────────────
-    // Un wallet = un seul solde + une devise + un appareil physique.
     await db.execute('''
       CREATE TABLE wallet_slots (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        remote_id   INTEGER,
         user_id     INTEGER NOT NULL,
         slot        INTEGER NOT NULL,
         wallet_id   TEXT    NOT NULL UNIQUE,
@@ -84,6 +102,7 @@ class DatabaseHelper {
         id          TEXT    PRIMARY KEY,
         user_id     INTEGER NOT NULL,
         slot_id     INTEGER NOT NULL,
+        wallet_uuid TEXT,
         title       TEXT    NOT NULL,
         amount      REAL    NOT NULL,
         type        TEXT    NOT NULL,

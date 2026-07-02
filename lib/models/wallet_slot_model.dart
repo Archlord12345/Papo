@@ -2,6 +2,7 @@
 /// Format ID : PAPO-{BLOCKCHAIN_ADDR}-{SLOT}  (slot 0-9)
 class WalletSlotModel {
   final int? id;
+  final int? remoteId;    // ID dans la base de données backend
   final int userId;
   final int slot;          // 0..9
   final String walletId;   // PAPO-{addr}-{slot}
@@ -14,6 +15,7 @@ class WalletSlotModel {
 
   WalletSlotModel({
     this.id,
+    this.remoteId,
     required this.userId,
     required this.slot,
     required this.walletId,
@@ -25,7 +27,7 @@ class WalletSlotModel {
     this.balance = 0,
   });
 
-  double get xofBalance => asset == 'XOF' ? balance : 0; // Only relevant for XOF specific logic
+  double get xofBalance => asset == 'XOF' ? balance : 0;
 
   Map<String, double> get balances => {
     asset: balance,
@@ -33,6 +35,7 @@ class WalletSlotModel {
 
   Map<String, dynamic> toMap() => {
     if (id != null) 'id': id,
+    'remote_id': remoteId,
     'user_id': userId,
     'slot': slot,
     'wallet_id': walletId,
@@ -46,19 +49,35 @@ class WalletSlotModel {
 
   factory WalletSlotModel.fromMap(Map<String, dynamic> m) => WalletSlotModel(
     id: m['id'] as int?,
-    userId: m['user_id'] as int,
-    slot: m['slot'] as int,
-    walletId: m['wallet_id'] as String,
+    remoteId: m['remote_id'] as int?,
+    userId: m['user_id'] as int? ?? 0,
+    slot: m['slot'] as int? ?? 0,
+    walletId: m['wallet_id'] as String? ?? '',
     name: m['name'] as String? ?? 'Wallet',
     deviceName: m['device_name'] as String? ?? 'Inconnu',
     asset: m['asset'] as String? ?? 'XOF',
     isActive: (m['is_active'] as int? ?? 0) == 1,
-    createdAt: m['created_at'] as String,
+    createdAt: m['created_at'] as String? ?? DateTime.now().toIso8601String(),
+    balance: (m['balance'] as num?)?.toDouble() ?? 0.0,
+  );
+
+  factory WalletSlotModel.fromJson(Map<String, dynamic> m) => WalletSlotModel(
+    id: m['id'] as int?,
+    remoteId: m['id'] as int?,
+    userId: m['userId'] as int? ?? 0,
+    slot: m['slot'] as int? ?? 0,
+    walletId: m['walletId'] as String? ?? '',
+    name: m['name'] as String? ?? 'Wallet',
+    deviceName: m['deviceName'] as String? ?? 'Inconnu',
+    asset: m['asset'] as String? ?? 'XOF',
+    isActive: m['isActive'] as bool? ?? false,
+    createdAt: m['createdAt'] as String? ?? DateTime.now().toIso8601String(),
     balance: (m['balance'] as num?)?.toDouble() ?? 0.0,
   );
 
   WalletSlotModel copyWith({
     int? id,
+    int? remoteId,
     String? name,
     String? deviceName,
     String? asset,
@@ -67,6 +86,7 @@ class WalletSlotModel {
   }) =>
     WalletSlotModel(
       id: id ?? this.id,
+      remoteId: remoteId ?? this.remoteId,
       userId: userId,
       slot: slot,
       walletId: walletId,
