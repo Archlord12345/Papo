@@ -5,7 +5,7 @@ import '../../state/app_state.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav.dart';
 import '../../utils/formatters.dart';
-import 'dashboard_screen.dart' show TxListItem;
+import 'dashboard_screen.dart' show _NewTxListItem;
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -23,9 +23,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     final filtered = appState.transactions.where((tx) {
       if (_filter == 'all') return true;
-      if (_filter == 'send') return tx.type == 'send';
-      if (_filter == 'receive') return tx.type == 'receive' || tx.type == 'deposit';
-      if (_filter == 'offline') return tx.isOffline;
+      if (_filter == 'send') return tx.amount < 0;
+      if (_filter == 'receive') return tx.amount > 0;
       return true;
     }).toList();
 
@@ -38,10 +37,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
         .fold<double>(0, (s, t) => s + t.amount);
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       appBar: AppBar(
-        title: const Text('Historique'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        title: const Text(
+          'Historique',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+        ),
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.search),
@@ -54,26 +57,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
         children: [
           // Summary cards
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
                 Expanded(
                   child: _SummaryCard(
-                    label: 'Envoyé',
-                    amount: sent,
+                    label: 'Total reçu',
+                    amount: received,
                     asset: 'XOF',
-                    color: AppColors.danger,
-                    icon: LucideIcons.arrowUpRight,
+                    color: AppColors.success,
+                    icon: LucideIcons.arrowDownLeft,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _SummaryCard(
-                    label: 'Reçu',
-                    amount: received,
+                    label: 'Total envoyé',
+                    amount: sent,
                     asset: 'XOF',
-                    color: AppColors.success,
-                    icon: LucideIcons.arrowDownLeft,
+                    color: AppColors.danger,
+                    icon: LucideIcons.arrowUpRight,
                   ),
                 ),
               ],
@@ -83,7 +86,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           // Filter chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
                 _Chip(
@@ -92,18 +95,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     current: _filter,
                     onTap: (v) => setState(() => _filter = v)),
                 _Chip(
-                    label: 'Envois',
-                    value: 'send',
-                    current: _filter,
-                    onTap: (v) => setState(() => _filter = v)),
-                _Chip(
-                    label: 'Réceptions',
+                    label: 'Reçus',
                     value: 'receive',
                     current: _filter,
                     onTap: (v) => setState(() => _filter = v)),
                 _Chip(
-                    label: 'Offline',
-                    value: 'offline',
+                    label: 'Envoyés',
+                    value: 'send',
                     current: _filter,
                     onTap: (v) => setState(() => _filter = v)),
               ],
@@ -123,9 +121,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     itemCount: filtered.length,
-                    itemBuilder: (ctx, i) => TxListItem(tx: filtered[i]),
+                    itemBuilder: (ctx, i) => _NewTxListItem(tx: filtered[i]),
                   ),
           ),
         ],
@@ -163,35 +161,32 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            color: color.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 16),
+                color: color.withValues(alpha: 0.2), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      color: Colors.grey, fontSize: 11)),
-              Text(
-                formatAmountAbs(amount, asset),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: color),
-              ),
-            ],
+          const SizedBox(height: 12),
+          Text(
+            '+${formatAmountAbs(amount, asset)}',
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: color),
           ),
+          const SizedBox(height: 4),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.grey, fontSize: 11)),
         ],
       ),
     );
@@ -217,11 +212,10 @@ class _Chip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          gradient: selected ? AppColors.primaryGradient : null,
           color: selected
-              ? null
+              ? AppColors.secondary
               : (Theme.of(context).brightness == Brightness.dark
                   ? AppColors.darkSurface
                   : Colors.white),
@@ -239,7 +233,7 @@ class _Chip extends StatelessWidget {
           style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: selected ? Colors.white : null),
+              color: selected ? AppColors.primary : null),
         ),
       ),
     );
@@ -286,7 +280,7 @@ class _SearchSheetState extends State<_SearchSheet> {
               controller: ctrl,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: results.length,
-              itemBuilder: (ctx, i) => TxListItem(tx: results[i]),
+              itemBuilder: (ctx, i) => _NewTxListItem(tx: results[i]),
             ),
           ),
         ],

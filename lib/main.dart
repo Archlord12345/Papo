@@ -21,6 +21,7 @@ import 'screens/main/wallet_screen.dart';
 import 'screens/main/send_money_screen.dart';
 import 'screens/main/receive_money_screen.dart';
 import 'screens/main/history_screen.dart';
+import 'screens/main/converter_screen.dart';
 
 // ── Offline ───────────────────────────────────────────────────────────────────
 import 'screens/offline/offline_payment_screen.dart';
@@ -184,6 +185,7 @@ class AppShell extends StatelessWidget {
       case 'ReceiveBluetooth': return const ReceiveBluetoothScreen();
       case 'ReceiveMoney':     return const ReceiveMoneyScreen();
       case 'History':          return const HistoryScreen();
+      case 'Converter':        return const ConverterScreen();
       case 'OfflinePayment':   return const OfflinePaymentScreen();
       case 'Sync':             return const SyncScreen();
       case 'UploadCNI':        return const UploadCNIScreen();
