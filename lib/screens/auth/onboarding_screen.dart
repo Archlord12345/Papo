@@ -17,22 +17,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   static const _pages = [
     _PageData(
+      icon: LucideIcons.wallet,
+      title: 'Bienvenue sur PayPoint',
+      desc: 'Votre portefeuille électronique simple, rapide et sécurisé.',
+    ),
+    _PageData(
+      icon: LucideIcons.radio,
+      title: '4 façons d\'envoyer',
+      desc: 'QR Code, NFC, Bluetooth ou Code temporaire — choisissez ce qui vous convient.',
+    ),
+    _PageData(
       icon: LucideIcons.shieldCheck,
-      title: 'Portefeuille Sécurisé',
-      desc: 'Gérez vos fonds en XOF et cryptomonnaies grâce à une infrastructure blockchain robuste et transparente.',
-      color: AppColors.primary,
-    ),
-    _PageData(
-      icon: LucideIcons.wifiOff,
-      title: 'Paiements Hors Ligne',
-      desc: 'Payez et transférez sans connexion internet via Bluetooth et NFC. Vos transactions sont signées localement.',
-      color: AppColors.accent,
-    ),
-    _PageData(
-      icon: LucideIcons.scanFace,
-      title: 'KYC Rapide',
-      desc: 'Validez votre identité en quelques minutes. Documents officiels + selfie IA pour débloquer toutes vos limites.',
-      color: AppColors.secondary,
+      title: 'Sécurité maximale',
+      desc: 'Biométrie, code PIN et chiffrement AES-256. Vos fonds sont toujours protégés.',
     ),
   ];
 
@@ -46,17 +43,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: AppColors.darkBg,
       body: SafeArea(
         child: Column(
           children: [
             Align(
               alignment: Alignment.topRight,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 child: TextButton(
-                  onPressed: () =>
-                      context.read<AppState>().setScreen('Login'),
-                  child: const Text('Passer'),
+                  onPressed: () => context.read<AppState>().setScreen('Login'),
+                  child: Text(
+                    'Passer',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -69,39 +72,61 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+              child: Column(
                 children: [
-                  // Dots
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
                       _pages.length,
                       (i) => AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
-                        margin: const EdgeInsets.only(right: 6),
-                        width: _page == i ? 24 : 8,
-                        height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        width: _page == i ? 32 : 10,
+                        height: 10,
                         decoration: BoxDecoration(
-                          color: _page == i
-                              ? AppColors.primary
-                              : AppColors.primary.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
+                          color: _page == i ? AppColors.primary : AppColors.darkBorder,
+                          borderRadius: BorderRadius.circular(5),
                         ),
                       ),
                     ),
                   ),
+                  const SizedBox(height: 32),
                   CustomButton(
-                    text: _page == _pages.length - 1 ? 'Commencer' : 'Suivant',
+                    text: _page == _pages.length - 1 ? 'Créer un compte' : 'Suivant',
                     onPressed: () {
                       if (_page < _pages.length - 1) {
                         _ctrl.nextPage(
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeInOut);
                       } else {
-                        context.read<AppState>().setScreen('Login');
+                        context.read<AppState>().setScreen('Register');
                       }
                     },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Déjà un compte ? ',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => context.read<AppState>().setScreen('Login'),
+                        child: Text(
+                          'Se connecter',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -117,8 +142,7 @@ class _PageData {
   final IconData icon;
   final String title;
   final String desc;
-  final Color color;
-  const _PageData({required this.icon, required this.title, required this.desc, required this.color});
+  const _PageData({required this.icon, required this.title, required this.desc});
 }
 
 class _PageView extends StatelessWidget {
@@ -134,17 +158,31 @@ class _PageView extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(32),
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
-              color: data.color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.secondary.withValues(alpha: 0.3),
+                  AppColors.darkSurface,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(30),
             ),
-            child: Icon(data.icon, size: 88, color: data.color),
+            child: Center(
+              child: Icon(data.icon, size: 56, color: AppColors.primary),
+            ),
           ),
           const SizedBox(height: 48),
           Text(
             data.title,
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -154,9 +192,7 @@ class _PageView extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               height: 1.6,
-              color: isDark
-                  ? AppColors.textDarkSecondary
-                  : AppColors.textLightSecondary,
+              color: Colors.grey.shade400,
             ),
           ),
         ],

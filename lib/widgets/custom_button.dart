@@ -39,9 +39,9 @@ class CustomButton extends StatelessWidget {
             color: borderColor,
             width: 1.5,
           ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
           ),
         ),
         child: Row(
@@ -65,7 +65,7 @@ class CustomButton extends StatelessWidget {
                 text,
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   color: textColor,
                 ),
               ),
@@ -81,12 +81,12 @@ class CustomButton extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: color == null ? buttonGradient : null,
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: (color ?? AppColors.primary).withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: (color ?? AppColors.primary).withValues(alpha: 0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -95,9 +95,9 @@ class CustomButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
           ),
         ),
         child: Row(
@@ -121,7 +121,7 @@ class CustomButton extends StatelessWidget {
                 text,
                 style: const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
               ),

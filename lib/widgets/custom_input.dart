@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class CustomInput extends StatefulWidget {
   final String label;
@@ -55,6 +57,7 @@ class _CustomInputState extends State<CustomInput> {
   @override
   Widget build(BuildContext context) {
     final effectiveController = widget.controller ?? _internalController;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,12 +65,13 @@ class _CustomInputState extends State<CustomInput> {
         if (widget.label.isNotEmpty) ...[
           Text(
             widget.label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
         ],
         TextFormField(
           controller: effectiveController,
@@ -75,22 +79,86 @@ class _CustomInputState extends State<CustomInput> {
           keyboardType: widget.keyboardType,
           validator: widget.validator,
           onChanged: widget.onChanged,
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+            fontSize: 15,
+          ),
           decoration: InputDecoration(
             hintText: widget.hint,
-            prefixIcon: widget.prefixIcon != null ? Icon(widget.prefixIcon, size: 20) : null,
-            suffixIcon: widget.isPassword
-                ? IconButton(
-                    icon: Icon(
-                      _obscureText ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
+            hintStyle: TextStyle(
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+              fontSize: 15,
+            ),
+            filled: true,
+            fillColor: isDark ? AppColors.darkSurface : Colors.grey.shade50,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 18,
+            ),
+            prefixIcon: widget.prefixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 18, right: 12),
+                    child: Icon(
+                      widget.prefixIcon,
+                      size: 22,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureText = !_obscureText;
-                      });
-                    },
                   )
-                : widget.suffixIcon,
+                : null,
+            suffixIcon: widget.isPassword
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: IconButton(
+                      icon: Icon(
+                        _obscureText ? LucideIcons.eyeOff : LucideIcons.eye,
+                        size: 20,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureText = !_obscureText;
+                        });
+                      },
+                    ),
+                  )
+                : widget.suffixIcon != null
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: widget.suffixIcon,
+                      )
+                    : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(
+                color: isDark ? AppColors.darkBorder : Colors.grey.shade200,
+                width: 1.5,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(
+                color: AppColors.primary,
+                width: 2,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: AppColors.danger,
+                width: 1.5,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: AppColors.danger,
+                width: 2,
+              ),
+            ),
           ),
         ),
       ],

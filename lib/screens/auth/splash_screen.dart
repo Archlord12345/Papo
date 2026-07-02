@@ -22,15 +22,14 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200));
+        vsync: this, duration: const Duration(milliseconds: 1500));
     _scale =
         CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
     _ctrl.forward();
 
-    Timer(const Duration(milliseconds: 2200), () {
+    Timer(const Duration(milliseconds: 3000), () {
       if (!mounted) return;
-      // No persistent session — always go to Login/Onboarding on cold start
       context.read<AppState>().setScreen('Onboarding');
     });
   }
@@ -43,31 +42,40 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: AppColors.darkBg,
       body: Stack(
         children: [
-          // Ambient glow top-right
           Positioned(
-            top: -80,
-            right: -80,
+            top: -100,
+            right: -100,
             child: Container(
-              width: 280,
-              height: 280,
+              width: 300,
+              height: 300,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.secondary.withValues(alpha: 0.4),
+                    AppColors.darkBg,
+                  ],
+                ),
               ),
             ),
           ),
           Positioned(
-            bottom: -60,
-            left: -60,
+            bottom: -80,
+            left: -80,
             child: Container(
-              width: 200,
-              height: 200,
+              width: 240,
+              height: 240,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.3),
+                    AppColors.darkBg,
+                  ],
+                ),
               ),
             ),
           ),
@@ -80,67 +88,51 @@ class _SplashScreenState extends State<SplashScreen>
                   ScaleTransition(
                     scale: _scale,
                     child: Container(
-                      padding: const EdgeInsets.all(24),
+                      width: 140,
+                      height: 140,
                       decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
+                        color: AppColors.primary.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.4),
-                            blurRadius: 32,
-                            offset: const Offset(0, 12),
-                          )
-                        ],
                       ),
-                      child: const Icon(LucideIcons.wallet,
-                          size: 64, color: Colors.white),
+                      child: Center(
+                        child: Text(
+                        'P',
+                        style: TextStyle(
+                          fontSize: 80,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   const Text(
-                    'PAYPOINT',
+                    'PayPoint',
                     style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 3,
+                      fontSize: 36,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'PAPO WALLET',
+                  const SizedBox(height: 8),
+                  Text(
+                    'Votre portefeuille électronique',
                     style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 5,
+                      fontSize: 14,
+                      color: AppColors.textDarkSecondary,
                     ),
                   ),
-                  const SizedBox(height: 56),
-                  const SizedBox(
-                    width: 36,
-                    height: 36,
+                  const SizedBox(height: 64),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 32,
-            left: 0,
-            right: 0,
-            child: Text(
-              'Fintech scalable & Blockchain pour l\'Afrique',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? AppColors.textDarkSecondary
-                    : AppColors.textLightSecondary,
               ),
             ),
           ),

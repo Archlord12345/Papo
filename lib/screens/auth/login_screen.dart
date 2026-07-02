@@ -14,14 +14,14 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneCtrl = TextEditingController();
-  final _pinCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   bool _loading = false;
 
   @override
   void dispose() {
-    _phoneCtrl.dispose();
-    _pinCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
@@ -30,118 +30,166 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
 
     final appState = context.read<AppState>();
-    final error = await appState.login(_phoneCtrl.text.trim(), _pinCtrl.text);
+    // TODO: Implement real login logic
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     if (!mounted) return;
     setState(() => _loading = false);
 
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: AppColors.danger),
-      );
-    } else {
-      appState.setScreen('Dashboard');
-    }
+    appState.setScreen('Dashboard');
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: AppColors.darkBg,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 48),
-                // Header
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  width: 60,
+                  height: 60,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.secondary.withValues(alpha: 0.3),
+                        AppColors.darkSurface,
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(LucideIcons.wallet,
-                      color: AppColors.primary, size: 36),
+                  child: Center(
+                    child: Text(
+                      'P',
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 40),
                 const Text(
-                  'Bon retour !',
+                  'Bon retour 👋',
                   style: TextStyle(
-                      fontSize: 30, fontWeight: FontWeight.bold),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Connectez-vous à votre portefeuille PAYPOINT.',
+                  'Connectez-vous pour accéder à votre portefeuille',
                   style: TextStyle(
-                      color: isDark
-                          ? AppColors.textDarkSecondary
-                          : AppColors.textLightSecondary),
+                    fontSize: 15,
+                    color: AppColors.textDarkSecondary,
+                  ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 48),
                 CustomInput(
-                  label: 'Numéro de téléphone',
-                  hint: '+225 07 00 00 00 00',
-                  prefixIcon: LucideIcons.phone,
-                  keyboardType: TextInputType.phone,
-                  controller: _phoneCtrl,
+                  label: 'Adresse e-mail',
+                  hint: 'vous@exemple.com',
+                  prefixIcon: LucideIcons.mail,
+                  keyboardType: TextInputType.emailAddress,
+                  controller: _emailCtrl,
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Champ obligatoire' : null,
                 ),
                 const SizedBox(height: 20),
                 CustomInput(
-                  label: 'Code PIN',
-                  hint: '••••••',
+                  label: 'Mot de passe',
+                  hint: '••••••••',
                   prefixIcon: LucideIcons.lock,
                   isPassword: true,
-                  keyboardType: TextInputType.number,
-                  controller: _pinCtrl,
+                  keyboardType: TextInputType.visiblePassword,
+                  controller: _passwordCtrl,
                   validator: (v) =>
                       (v == null || v.isEmpty) ? 'Champ obligatoire' : null,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () =>
                         context.read<AppState>().setScreen('ForgotPassword'),
-                    child: const Text('Mot de passe oublié ?'),
+                    child: Text(
+                      'Mot de passe oublié ?',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 CustomButton(
                   text: 'Se Connecter',
                   isLoading: _loading,
                   onPressed: _submit,
                 ),
-                const SizedBox(height: 16),
-                CustomButton(
-                  text: 'Connexion Biométrique',
-                  isPrimary: false,
-                  icon: const Icon(LucideIcons.fingerprint,
-                      color: AppColors.primary),
-                  onPressed: () =>
-                      context.read<AppState>().setScreen('BiometricLogin'),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () => context.read<AppState>().setScreen('BiometricLogin'),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.darkSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.darkBorder,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.fingerprint,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Connexion biométrique',
+                          style: TextStyle(
+                            color: Colors.grey.shade300,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 56),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Nouveau sur PAPO ? ',
+                      'Pas encore de compte ? ',
                       style: TextStyle(
-                          color: isDark
-                              ? AppColors.textDarkSecondary
-                              : AppColors.textLightSecondary),
+                        color: AppColors.textDarkSecondary,
+                        fontSize: 14,
+                      ),
                     ),
                     TextButton(
-                      onPressed: () =>
-                          context.read<AppState>().setScreen('Register'),
-                      child: const Text('Créer un compte',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () => context.read<AppState>().setScreen('Register'),
+                      child: Text(
+                        'Créer un compte',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ],
                 ),
